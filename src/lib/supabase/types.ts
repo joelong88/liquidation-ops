@@ -526,7 +526,37 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_no_awb_parcel: {
+        Args: {
+          p_batch_id?: number
+          p_batch_type?: string
+          p_cod: number
+          p_pallet_code?: string
+        }
+        Returns: Json
+      }
       current_app_role: { Args: never; Returns: string }
+      endorse_parcels_to_batch: {
+        Args: {
+          p_batch_id?: number
+          p_batch_type?: string
+          p_pallet_code?: string
+          p_tids: string[]
+        }
+        Returns: Json
+      }
+      recompute_batch_pricing: {
+        Args: { p_batch_id: number }
+        Returns: undefined
+      }
+      record_batch_sale: {
+        Args: {
+          p_batch_id: number
+          p_buyer_name: string
+          p_sale_amount: number
+        }
+        Returns: Json
+      }
       record_scan_event: {
         Args: {
           p_parcel_category?: string
