@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8743", "--directory", "/private/tmp/claude-501/-Users-joelong-claude-Ops-Liquidation/ee00491f-3b65-4dc4-9eca-dcb1428dfefa/scratchpad"],
       "port": 8743
+    },
+    {
+      "name": "liquidation-ops-dev",
+      "runtimeExecutable": "/Users/joelong/.nvm/versions/node/v24.18.0/bin/npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
     }
   ]
 }

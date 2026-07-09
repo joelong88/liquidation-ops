@@ -14,7 +14,7 @@
 -- `anon` intentionally gets nothing anywhere: the app requires login (see proxy.ts), so
 -- there is no legitimate pre-auth read/write path.
 
-create function current_role() returns text
+create function current_app_role() returns text
 language sql
 stable
 security definer
@@ -30,7 +30,7 @@ alter table profile enable row level security;
 
 create policy profile_select_self_or_owner on profile
   for select to authenticated
-  using (id = auth.uid() or current_role() = 'owner');
+  using (id = auth.uid() or current_app_role() = 'owner');
 -- No insert/update/delete policy for authenticated users: role assignment is done
 -- server-side via the service-role key from the owner-only /admin/users route,
 -- not via direct client table writes.
@@ -56,10 +56,10 @@ alter table parcel enable row level security;
 create policy parcel_select_all on parcel for select to authenticated using (true);
 
 create policy parcel_insert_ops on parcel for insert to authenticated
-  with check (current_role() in ('warehouse_ops','recovery_team','owner'));
+  with check (current_app_role() in ('warehouse_ops','recovery_team','owner'));
 
 create policy parcel_update_ops on parcel for update to authenticated
-  using (current_role() in ('warehouse_ops','recovery_team','owner'));
+  using (current_app_role() in ('warehouse_ops','recovery_team','owner'));
 
 -- stage_event ---------------------------------------------------------------
 grant select, insert on stage_event to authenticated;
@@ -69,7 +69,7 @@ alter table stage_event enable row level security;
 create policy stage_event_select_all on stage_event for select to authenticated using (true);
 
 create policy stage_event_insert_ops on stage_event for insert to authenticated
-  with check (current_role() in ('warehouse_ops','recovery_team','owner'));
+  with check (current_app_role() in ('warehouse_ops','recovery_team','owner'));
 
 -- batch -----------------------------------------------------------------
 grant select, insert, update on batch to authenticated;
@@ -77,13 +77,13 @@ grant select, insert, update on batch to authenticated;
 alter table batch enable row level security;
 
 create policy batch_select_recovery_finance_owner on batch for select to authenticated
-  using (current_role() in ('recovery_team','finance_team','owner'));
+  using (current_app_role() in ('recovery_team','finance_team','owner'));
 
 create policy batch_insert_recovery on batch for insert to authenticated
-  with check (current_role() in ('recovery_team','owner'));
+  with check (current_app_role() in ('recovery_team','owner'));
 
 create policy batch_update_recovery on batch for update to authenticated
-  using (current_role() in ('recovery_team','owner'));
+  using (current_app_role() in ('recovery_team','owner'));
 
 -- sale --------------------------------------------------------------------
 grant select, insert, update on sale to authenticated;
@@ -91,13 +91,13 @@ grant select, insert, update on sale to authenticated;
 alter table sale enable row level security;
 
 create policy sale_select_recovery_finance_owner on sale for select to authenticated
-  using (current_role() in ('recovery_team','finance_team','owner'));
+  using (current_app_role() in ('recovery_team','finance_team','owner'));
 
 create policy sale_insert_finance on sale for insert to authenticated
-  with check (current_role() in ('finance_team','owner'));
+  with check (current_app_role() in ('finance_team','owner'));
 
 create policy sale_update_finance on sale for update to authenticated
-  using (current_role() in ('finance_team','owner'));
+  using (current_app_role() in ('finance_team','owner'));
 
 -- sync observability tables: read-only for authenticated users, writes are service-role only
 grant select on expected_arrival, cod_sync_snapshot, sync_run to authenticated;
