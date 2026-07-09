@@ -527,6 +527,15 @@ export type Database = {
     }
     Functions: {
       current_app_role: { Args: never; Returns: string }
+      record_scan_event: {
+        Args: {
+          p_parcel_category?: string
+          p_stage: string
+          p_station?: string
+          p_tid: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
