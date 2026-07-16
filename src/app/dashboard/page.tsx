@@ -12,7 +12,7 @@ const NAV_LINKS: { href: string; label: string; roles: Role[] }[] = [
     label: 'Scan history',
     roles: ['warehouse_ops', 'recovery_team', 'owner'],
   },
-  { href: '/pipeline', label: 'Pipeline overview', roles: ['recovery_team', 'owner'] },
+  { href: '/overview', label: 'Parcel count overview', roles: ['recovery_team', 'owner'] },
   { href: '/recovery/storage', label: 'TTXB storage', roles: ['recovery_team', 'owner'] },
   { href: '/recovery/endorsement', label: 'Endorsement', roles: ['recovery_team', 'owner'] },
   {
