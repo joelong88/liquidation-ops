@@ -3,18 +3,15 @@ import { getCurrentProfile, type Role } from '@/lib/supabase/profile'
 import { logout } from '@/app/actions/auth'
 
 // Placeholder landing page for now. Once M6-M7 land, this should route each role
-// to its actual home (warehouse_ops -> /scan, recovery_team -> /recovery/storage,
-// finance_team -> /finance/sales, owner -> the real dashboard content below).
+// to its actual home (warehouse_ops -> /ops, recovery_team -> /ops, finance_team ->
+// /recovery/batches, owner -> the real dashboard content below).
 const NAV_LINKS: { href: string; label: string; roles: Role[] }[] = [
-  { href: '/scan', label: 'Scan', roles: ['warehouse_ops', 'recovery_team', 'owner'] },
+  { href: '/ops', label: 'Operations (10 stations)', roles: ['warehouse_ops', 'recovery_team', 'owner'] },
   {
     href: '/scan/history',
     label: 'Scan history',
     roles: ['warehouse_ops', 'recovery_team', 'owner'],
   },
-  { href: '/overview', label: 'Parcel count overview', roles: ['recovery_team', 'owner'] },
-  { href: '/recovery/storage', label: 'TTXB storage', roles: ['recovery_team', 'owner'] },
-  { href: '/recovery/endorsement', label: 'Endorsement', roles: ['recovery_team', 'owner'] },
   {
     href: '/recovery/batches',
     label: 'Batches',
