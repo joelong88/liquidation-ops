@@ -9,7 +9,7 @@ export default async function StripTtxbStoragePage() {
     .from('sack')
     .select('sack_id, sack_code, shipper_segment, hold_until, hold_forced_success, status')
     .eq('area', 'STORAGE')
-    .eq('status', 'OPEN')
+    .eq('status', 'CLOSED')
     .order('hold_until', { ascending: true, nullsFirst: true })
 
   const sackIds = (sacks ?? []).map((s) => s.sack_id)
@@ -32,8 +32,9 @@ export default async function StripTtxbStoragePage() {
           Stripping from TTXB Storage Area
         </h2>
         <p className="text-sm text-neutral-500">
-          Sack-level scan, hold-gated. Open sacks below, sorted by maturity — force success if a
-          sack needs to strip before its 7-day hold matures.
+          Sack-level scan, hold-gated. Only closed sacks (sealed at the inbound station) can be
+          stripped — the list below shows those, sorted by maturity. Force success if a sack
+          needs to strip before its 7-day hold matures.
         </p>
       </div>
 
@@ -85,7 +86,9 @@ export default async function StripTtxbStoragePage() {
         </tbody>
       </table>
       {sacks?.length === 0 && (
-        <p className="text-sm text-neutral-400">Nothing currently open in TTXB storage.</p>
+        <p className="text-sm text-neutral-400">
+          No closed sacks waiting to strip — close a sack at the Storage inbound station first.
+        </p>
       )}
     </div>
   )

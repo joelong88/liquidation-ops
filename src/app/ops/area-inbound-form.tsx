@@ -10,6 +10,7 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
   const [sackCode, setSackCode] = useState('')
   const [tid, setTid] = useState('')
   const [pending, setPending] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [banner, setBanner] = useState<{ status: LogEntry['status']; message: string } | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
   const sackRef = useRef<HTMLInputElement>(null)
@@ -56,27 +57,64 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
     tidRef.current?.focus()
   }
 
+  async function handleCloseSack() {
+    const sackValue = sackCode.trim()
+    if (!sackValue || closing) return
+    setClosing(true)
+
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc('close_sack', { p_sack_code: sackValue })
+
+    if (error) {
+      pushEntry(sackValue, 'error', error.message)
+    } else {
+      const result = data as { ok: boolean; error?: string }
+      if (result.ok) {
+        pushEntry(sackValue, 'success', `Sack ${sackValue} closed. Scan a new sack ID for the next one.`)
+        setSackCode('')
+      } else if (result.error === 'not_found') {
+        pushEntry(sackValue, 'error', 'No open sack with that code.')
+      } else if (result.error === 'already_closed') {
+        pushEntry(sackValue, 'error', 'Already closed.')
+      } else {
+        pushEntry(sackValue, 'error', result.error ?? 'Close failed.')
+      }
+    }
+    setClosing(false)
+    sackRef.current?.focus()
+  }
+
   return (
     <div className="flex max-w-md flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <label htmlFor="sackCode" className="text-sm font-medium text-neutral-700">
-          Sack ID (stays set — scan once, reuse for every TID below)
+      <div className="rounded-md border-2 border-neutral-300 bg-neutral-50 p-4">
+        <label htmlFor="sackCode" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          Current sack (scan once, reuse for every TID below)
         </label>
-        <input
-          ref={sackRef}
-          id="sackCode"
-          value={sackCode}
-          onChange={(e) => setSackCode(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              tidRef.current?.focus()
-            }
-          }}
-          autoComplete="off"
-          placeholder="Scan or type sack ID, then Enter"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-base font-mono focus:border-neutral-500 focus:outline-none"
-        />
+        <div className="mt-1 flex items-center gap-2">
+          <input
+            ref={sackRef}
+            id="sackCode"
+            value={sackCode}
+            onChange={(e) => setSackCode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                tidRef.current?.focus()
+              }
+            }}
+            autoComplete="off"
+            placeholder="Scan or type sack ID, then Enter"
+            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-2xl font-bold font-mono focus:border-neutral-500 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleCloseSack}
+            disabled={!sackCode.trim() || closing}
+            className="whitespace-nowrap rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-40"
+          >
+            {closing ? 'Closing…' : 'Close sack'}
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-2">

@@ -5,19 +5,12 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 type Sack = { sack_id: number; sack_code: string; shipper_segment: string | null }
-type NoAwbParcel = { tid: string; cod_value: number | null }
 
-export function ConsolidatePalletForm({
-  sacks,
-  noAwbParcels,
-}: {
-  sacks: Sack[]
-  noAwbParcels: NoAwbParcel[]
-}) {
+export function ConsolidatePalletForm({ sacks }: { sacks: Sack[] }) {
   const router = useRouter()
   const [palletCode, setPalletCode] = useState('')
   const [selectedSacks, setSelectedSacks] = useState<Set<string>>(new Set())
-  const [selectedTids, setSelectedTids] = useState<Set<string>>(new Set())
+  const [confirming, setConfirming] = useState(false)
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
 
@@ -30,18 +23,9 @@ export function ConsolidatePalletForm({
     })
   }
 
-  function toggleTid(tid: string) {
-    setSelectedTids((prev) => {
-      const next = new Set(prev)
-      if (next.has(tid)) next.delete(tid)
-      else next.add(tid)
-      return next
-    })
-  }
-
-  async function handleSubmit() {
+  async function handleConfirm() {
     const code = palletCode.trim()
-    if (!code || (selectedSacks.size === 0 && selectedTids.size === 0) || pending) return
+    if (!code || selectedSacks.size === 0 || pending) return
     setPending(true)
     setResult(null)
 
@@ -49,7 +33,6 @@ export function ConsolidatePalletForm({
     const { data, error } = await supabase.rpc('assign_pallet', {
       p_pallet_code: code,
       p_sack_codes: Array.from(selectedSacks),
-      p_tids: Array.from(selectedTids),
     })
 
     if (error) {
@@ -59,28 +42,27 @@ export function ConsolidatePalletForm({
         ok: boolean
         error?: string
         added_sacks: string[]
-        added_tids: string[]
-        skipped: { sack_code?: string; tid?: string; reason: string }[]
+        skipped: { sack_code?: string; reason: string }[]
       }
       if (!r.ok) {
         setResult({ ok: false, message: r.error ?? 'Failed.' })
       } else {
         setResult({
           ok: true,
-          message: `Pallet ${code}: ${r.added_sacks.length} sack(s) + ${r.added_tids.length} NO-AWB TID(s) added${
+          message: `Pallet ${code}: ${r.added_sacks.length} sack(s) added${
             r.skipped.length > 0 ? ` (${r.skipped.length} skipped — see console)` : ''
           }.`,
         })
         if (r.skipped.length > 0) console.log('Skipped:', r.skipped)
         setSelectedSacks(new Set())
-        setSelectedTids(new Set())
         router.refresh()
       }
     }
+    setConfirming(false)
     setPending(false)
   }
 
-  const totalSelected = selectedSacks.size + selectedTids.size
+  const canSubmit = palletCode.trim() && selectedSacks.size > 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -91,19 +73,43 @@ export function ConsolidatePalletForm({
         <input
           id="palletCode"
           value={palletCode}
-          onChange={(e) => setPalletCode(e.target.value)}
+          onChange={(e) => {
+            setPalletCode(e.target.value)
+            setConfirming(false)
+          }}
           placeholder="Scan or type pallet ID"
           autoComplete="off"
           className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-mono"
         />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!palletCode.trim() || totalSelected === 0 || pending}
-          className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending ? 'Assembling…' : `Assemble (${totalSelected} selected)`}
-        </button>
+        {!confirming ? (
+          <button
+            type="button"
+            onClick={() => canSubmit && setConfirming(true)}
+            disabled={!canSubmit || pending}
+            className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {`Assemble (${selectedSacks.size} selected)`}
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5">
+            <span className="text-sm font-medium text-amber-900">Are you sure?</span>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={pending}
+              className="rounded-md bg-amber-700 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+            >
+              {pending ? 'Assembling…' : 'Yes, assemble'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       {result && (
@@ -158,53 +164,6 @@ export function ConsolidatePalletForm({
         </table>
         {sacks.length === 0 && (
           <p className="text-sm text-neutral-400">No stripped TTXB sacks waiting for a pallet.</p>
-        )}
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          NO-AWB parcels (no sack — assigned directly)
-        </h3>
-        <table className="w-full max-w-2xl text-left text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
-              <th className="py-2 pr-2">
-                <input
-                  type="checkbox"
-                  checked={noAwbParcels.length > 0 && selectedTids.size === noAwbParcels.length}
-                  onChange={() =>
-                    setSelectedTids((prev) =>
-                      prev.size === noAwbParcels.length
-                        ? new Set()
-                        : new Set(noAwbParcels.map((p) => p.tid))
-                    )
-                  }
-                />
-              </th>
-              <th className="py-2 pr-4">TID</th>
-              <th className="py-2">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {noAwbParcels.map((p) => (
-              <tr key={p.tid} className="border-b border-neutral-100">
-                <td className="py-2 pr-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedTids.has(p.tid)}
-                    onChange={() => toggleTid(p.tid)}
-                  />
-                </td>
-                <td className="py-2 pr-4 font-mono">{p.tid}</td>
-                <td className="py-2">
-                  {p.cod_value != null ? `₱${Number(p.cod_value).toLocaleString()}` : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {noAwbParcels.length === 0 && (
-          <p className="text-sm text-neutral-400">No unassigned NO-AWB parcels.</p>
         )}
       </section>
     </div>
