@@ -948,6 +948,10 @@ export type Database = {
         }
         Returns: Json
       }
+      close_sack: {
+        Args: { p_sack_code: string; p_station?: string }
+        Returns: Json
+      }
       create_no_awb_parcel: {
         Args: {
           p_batch_id?: number

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { CsvDownloadButton } from '@/app/ops/force-success/csv-download-button'
 
 export default async function ForceSuccessPage() {
   const supabase = await createClient()
@@ -8,7 +9,8 @@ export default async function ForceSuccessPage() {
     .eq('needs_force_success', true)
     .order('output_resolved_at', { ascending: true })
 
-  const tidList = (parcels ?? []).map((p) => p.tid).join('\n')
+  const rows = parcels ?? []
+  const tidList = rows.map((p) => p.tid).join('\n')
 
   return (
     <div className="flex flex-col gap-4">
@@ -22,18 +24,24 @@ export default async function ForceSuccessPage() {
         </p>
       </div>
 
-      {parcels && parcels.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <label htmlFor="tidExport" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Copy list
-          </label>
-          <textarea
-            id="tidExport"
-            readOnly
-            value={tidList}
-            rows={4}
-            className="w-full max-w-md rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs"
-          />
+      {rows.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <CsvDownloadButton rows={rows} />
+            <span className="text-xs text-neutral-500">{rows.length} TID(s)</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="tidExport" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Or copy the plain list
+            </label>
+            <textarea
+              id="tidExport"
+              readOnly
+              value={tidList}
+              rows={4}
+              className="w-full max-w-md rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs"
+            />
+          </div>
         </div>
       )}
 
@@ -47,7 +55,7 @@ export default async function ForceSuccessPage() {
           </tr>
         </thead>
         <tbody>
-          {parcels?.map((p) => (
+          {rows.map((p) => (
             <tr key={p.tid} className="border-b border-neutral-100">
               <td className="py-2 pr-4 font-mono">{p.tid}</td>
               <td className="py-2 pr-4">{p.current_stage}</td>
@@ -59,7 +67,7 @@ export default async function ForceSuccessPage() {
           ))}
         </tbody>
       </table>
-      {parcels?.length === 0 && (
+      {rows.length === 0 && (
         <p className="text-sm text-neutral-400">
           Nothing flagged right now — expected until the triggering rules are defined.
         </p>

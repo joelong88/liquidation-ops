@@ -3,11 +3,19 @@
 import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+type LogEntry = { id: number; tid: string; status: 'success' | 'error'; message: string }
+let logId = 0
+
 export function RepackForm() {
   const [tid, setTid] = useState('')
   const [pending, setPending] = useState(false)
   const [banner, setBanner] = useState<{ ok: boolean; message: string } | null>(null)
+  const [log, setLog] = useState<LogEntry[]>([])
   const tidRef = useRef<HTMLInputElement>(null)
+
+  function pushEntry(t: string, status: LogEntry['status'], message: string) {
+    setLog((prev) => [{ id: logId++, tid: t, status, message }, ...prev])
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -18,22 +26,29 @@ export function RepackForm() {
     const supabase = createClient()
     const { data, error } = await supabase.rpc('repack_scan', { p_tid: value })
 
+    let message: string
+    let ok: boolean
     if (error) {
-      setBanner({ ok: false, message: error.message })
+      ok = false
+      message = error.message
     } else {
       const result = data as { ok: boolean; error?: string; sack_id?: number }
+      ok = result.ok
       if (result.ok) {
-        setBanner({ ok: true, message: 'Pulled for repack — rest of the sack unaffected.' })
+        message = 'Pulled for repack — rest of the sack unaffected.'
       } else if (result.error === 'not_found') {
-        setBanner({ ok: false, message: 'Unknown TID.' })
+        message = 'Unknown TID.'
       } else if (result.error === 'not_in_open_sack') {
-        setBanner({ ok: false, message: 'This TID isn’t in an open sack.' })
+        message = 'This TID isn’t in an open sack.'
       } else if (result.error === 'sack_not_open_storage') {
-        setBanner({ ok: false, message: 'This TID’s sack isn’t an open Storage sack.' })
+        message = 'This TID’s sack isn’t an open/closed Storage sack.'
       } else {
-        setBanner({ ok: false, message: result.error ?? 'Repack failed.' })
+        message = result.error ?? 'Repack failed.'
       }
     }
+
+    setBanner({ ok, message })
+    pushEntry(value, ok ? 'success' : 'error', message)
     setTid('')
     setPending(false)
     tidRef.current?.focus()
@@ -68,6 +83,26 @@ export function RepackForm() {
           {banner.message}
         </div>
       )}
+
+      <div className="flex flex-col gap-1">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          TIDs scanned this session ({log.length})
+        </h3>
+        <ul className="flex flex-col gap-1">
+          {log.map((entry) => (
+            <li
+              key={entry.id}
+              className="flex items-center justify-between rounded-md border border-neutral-200 px-3 py-1.5 text-xs"
+            >
+              <span className="font-mono">{entry.tid}</span>
+              <span className={entry.status === 'success' ? 'text-green-700' : 'text-red-700'}>
+                {entry.status}
+              </span>
+            </li>
+          ))}
+          {log.length === 0 && <li className="text-xs text-neutral-400">No scans yet.</li>}
+        </ul>
+      </div>
     </div>
   )
 }
