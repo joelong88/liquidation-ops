@@ -7,7 +7,10 @@ const GROUPS = [
   {
     label: null,
     accent: 'border-neutral-300',
-    tabs: [{ href: '/ops/first-scan', label: '1. First Scan' }],
+    tabs: [
+      { href: '/ops/data-source', label: '0. Data Source' },
+      { href: '/ops/first-scan', label: '1. First Scan' },
+    ],
   },
   {
     label: 'TTXB Storage flow',
@@ -15,8 +18,7 @@ const GROUPS = [
     tabs: [
       { href: '/ops/inbound-ttxb-storage', label: '2. Inbound → TTXB Storage' },
       { href: '/ops/repack-ttxb-storage', label: '3. Repack (TTXB Storage)' },
-      { href: '/ops/strip-ttxb-storage', label: '4. Strip (TTXB Storage)' },
-      { href: '/ops/consolidate-pallet', label: 'Consolidate onto Pallet' },
+      { href: '/ops/strip-ttxb-storage', label: '4. Strip & Consolidate (TTXB Storage)' },
     ],
   },
   {
@@ -34,7 +36,6 @@ const GROUPS = [
       { href: '/ops/endorsement', label: '7. Endorsement' },
       { href: '/ops/outbound-liquidation', label: '8. Outbound (Liquidation Area)' },
       { href: '/ops/force-success', label: '9. Force-Success List' },
-      { href: '/ops/overview', label: '10. Overview' },
     ],
   },
 ] as const

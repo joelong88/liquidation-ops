@@ -513,6 +513,36 @@ export type Database = {
           },
         ]
       }
+      parcel_import: {
+        Row: {
+          cod_value: number | null
+          consumed_at: string | null
+          granular_status: string | null
+          imported_at: string
+          imported_by: string | null
+          item_description: string | null
+          tid: string
+        }
+        Insert: {
+          cod_value?: number | null
+          consumed_at?: string | null
+          granular_status?: string | null
+          imported_at?: string
+          imported_by?: string | null
+          item_description?: string | null
+          tid: string
+        }
+        Update: {
+          cod_value?: number | null
+          consumed_at?: string | null
+          granular_status?: string | null
+          imported_at?: string
+          imported_by?: string | null
+          item_description?: string | null
+          tid?: string
+        }
+        Relationships: []
+      }
       profile: {
         Row: {
           full_name: string | null
@@ -948,6 +978,10 @@ export type Database = {
         }
         Returns: Json
       }
+      close_pallet: {
+        Args: { p_pallet_code: string; p_station?: string }
+        Returns: Json
+      }
       close_sack: {
         Args: { p_sack_code: string; p_station?: string }
         Returns: Json
@@ -979,6 +1013,7 @@ export type Database = {
         Args: { p_reason: string; p_sack_code: string }
         Returns: Json
       }
+      import_parcel_rows: { Args: { p_rows: Json }; Returns: Json }
       recompute_batch_pricing: {
         Args: { p_batch_id: number }
         Returns: undefined

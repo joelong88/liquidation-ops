@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { formatDateTime } from '@/lib/format-date'
 
 type Bin = { code: string; label: string; area: string | null; is_hvi: boolean }
 
@@ -87,13 +88,13 @@ export function FirstScanForm({ bins }: { bins: Bin[] }) {
                     : (result.error ?? 'Scan failed')}
                 </div>
                 {result.error === 'duplicate' && result.event_ts && (
-                  <div className="text-sm opacity-80">{new Date(result.event_ts).toLocaleString()}</div>
+                  <div className="text-sm opacity-80">{formatDateTime(result.event_ts)}</div>
                 )}
               </>
             ) : (
               <>
-                <div className="font-mono text-base opacity-70">{scannedTid}</div>
-                <div className="text-8xl font-black leading-none">{result.bin}</div>
+                <div className="font-mono text-4xl font-bold opacity-80">{scannedTid}</div>
+                <div className="text-9xl font-black leading-none">{result.bin}</div>
                 <div className="text-2xl font-semibold">{result.bin_label}</div>
                 {result.area && <div className="text-base opacity-80">Carry to: {result.area}</div>}
                 {result.is_hvi != null && (

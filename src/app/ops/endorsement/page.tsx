@@ -6,7 +6,7 @@ export default async function EndorsementPage() {
   const { data: pallets } = await supabase
     .from('pallet')
     .select('pallet_id, pallet_code')
-    .eq('status', 'ASSEMBLING')
+    .in('status', ['ASSEMBLING', 'CLOSED'])
     .order('assembled_at')
 
   return (
