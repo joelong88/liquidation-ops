@@ -27,7 +27,7 @@ const BIN_COLORS: Record<string, string> = {
   G: 'border-purple-400 bg-purple-50 text-purple-900',
 }
 
-export function FirstScanForm({ bins }: { bins: Bin[] }) {
+export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshold: number }) {
   const [tid, setTid] = useState('')
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<BinResult | null>(null)
@@ -122,6 +122,16 @@ export function FirstScanForm({ bins }: { bins: Bin[] }) {
             </li>
           ))}
         </ul>
+        <div className="mt-3 flex flex-col gap-1 text-xs text-neutral-500">
+          <p>
+            HVI threshold: GMV ≥ <span className="font-semibold">₱{hviThreshold.toLocaleString()}</span>{' '}
+            classifies as HVI (bin A or C).
+          </p>
+          <p>
+            Cross-border value conversion: <span className="font-semibold">1 USD = ₱61.45</span> (fixed
+            rate, used only when goods/COD/insurance value are all unavailable).
+          </p>
+        </div>
       </div>
     </div>
   )

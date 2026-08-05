@@ -6,7 +6,7 @@ export default async function DataSourcePage() {
   const supabase = await createClient()
   const { data: pending } = await supabase
     .from('parcel_import')
-    .select('tid, granular_status, cod_value, item_description, imported_at')
+    .select('tid, granular_status, goods_value, cod_value, insurance_value, xb_value_usd, item_description, imported_at')
     .is('consumed_at', null)
     .order('imported_at', { ascending: false })
     .limit(50)
@@ -23,11 +23,11 @@ export default async function DataSourcePage() {
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Data Source</h2>
         <p className="text-sm text-neutral-500">
-          Upload a CSV of TIDs expected to come through First Scan, along with their
-          status, COD value, and item description. This is what First Scan&apos;s output-bin
-          logic actually matches against — without it, every scan falls back to bin F.
-          A row is used up (and removed from the pending list below) the moment its TID
-          is physically First-Scanned.
+          Upload a CSV of TIDs expected to come through First Scan, along with their status
+          and value fields (goods, COD, insurance, cross-border USD). This is what First
+          Scan&apos;s output-bin and GMV logic actually match against — without it, every scan
+          falls back to bin F and an unclassified value. A row is used up (and removed from
+          the pending list below) the moment its TID is physically First-Scanned.
         </p>
       </div>
 
@@ -42,7 +42,10 @@ export default async function DataSourcePage() {
             <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
               <th className="py-2 pr-4">TID</th>
               <th className="py-2 pr-4">Status</th>
-              <th className="py-2 pr-4">COD Value</th>
+              <th className="py-2 pr-4">Goods</th>
+              <th className="py-2 pr-4">COD</th>
+              <th className="py-2 pr-4">Insurance</th>
+              <th className="py-2 pr-4">XB (USD)</th>
               <th className="py-2 pr-4">Item Description</th>
               <th className="py-2">Imported</th>
             </tr>
@@ -52,7 +55,10 @@ export default async function DataSourcePage() {
               <tr key={r.tid} className="border-b border-neutral-100">
                 <td className="py-2 pr-4 font-mono">{r.tid}</td>
                 <td className="py-2 pr-4">{r.granular_status ?? '—'}</td>
+                <td className="py-2 pr-4">{r.goods_value ?? '—'}</td>
                 <td className="py-2 pr-4">{r.cod_value ?? '—'}</td>
+                <td className="py-2 pr-4">{r.insurance_value ?? '—'}</td>
+                <td className="py-2 pr-4">{r.xb_value_usd ?? '—'}</td>
                 <td className="py-2 pr-4">{r.item_description ?? '—'}</td>
                 <td className="py-2">{formatDateTime(r.imported_at)}</td>
               </tr>

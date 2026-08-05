@@ -345,12 +345,14 @@ export type Database = {
           created_at: string
           current_stage: string
           effective_value: number | null
+          goods_value: number | null
           granular_status: string | null
           hold_forced_at: string | null
           hold_forced_by: string | null
           hold_forced_reason: string | null
           hold_forced_success: boolean
           hold_until: string | null
+          insurance_value: number | null
           is_hvi: boolean | null
           is_synthetic_tid: boolean
           item_type: string | null
@@ -375,6 +377,7 @@ export type Database = {
           tid: string
           updated_at: string
           value_source: string | null
+          xb_value_usd: number | null
         }
         Insert: {
           batch_id?: number | null
@@ -384,12 +387,14 @@ export type Database = {
           created_at?: string
           current_stage?: string
           effective_value?: number | null
+          goods_value?: number | null
           granular_status?: string | null
           hold_forced_at?: string | null
           hold_forced_by?: string | null
           hold_forced_reason?: string | null
           hold_forced_success?: boolean
           hold_until?: string | null
+          insurance_value?: number | null
           is_hvi?: boolean | null
           is_synthetic_tid?: boolean
           item_type?: string | null
@@ -414,6 +419,7 @@ export type Database = {
           tid: string
           updated_at?: string
           value_source?: string | null
+          xb_value_usd?: number | null
         }
         Update: {
           batch_id?: number | null
@@ -423,12 +429,14 @@ export type Database = {
           created_at?: string
           current_stage?: string
           effective_value?: number | null
+          goods_value?: number | null
           granular_status?: string | null
           hold_forced_at?: string | null
           hold_forced_by?: string | null
           hold_forced_reason?: string | null
           hold_forced_success?: boolean
           hold_until?: string | null
+          insurance_value?: number | null
           is_hvi?: boolean | null
           is_synthetic_tid?: boolean
           item_type?: string | null
@@ -453,6 +461,7 @@ export type Database = {
           tid?: string
           updated_at?: string
           value_source?: string | null
+          xb_value_usd?: number | null
         }
         Relationships: [
           {
@@ -517,29 +526,38 @@ export type Database = {
         Row: {
           cod_value: number | null
           consumed_at: string | null
+          goods_value: number | null
           granular_status: string | null
           imported_at: string
           imported_by: string | null
+          insurance_value: number | null
           item_description: string | null
           tid: string
+          xb_value_usd: number | null
         }
         Insert: {
           cod_value?: number | null
           consumed_at?: string | null
+          goods_value?: number | null
           granular_status?: string | null
           imported_at?: string
           imported_by?: string | null
+          insurance_value?: number | null
           item_description?: string | null
           tid: string
+          xb_value_usd?: number | null
         }
         Update: {
           cod_value?: number | null
           consumed_at?: string | null
+          goods_value?: number | null
           granular_status?: string | null
           imported_at?: string
           imported_by?: string | null
+          insurance_value?: number | null
           item_description?: string | null
           tid?: string
+          xb_value_usd?: number | null
         }
         Relationships: []
       }

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { serverNow } from '@/lib/now'
-import { StripForm } from '@/app/ops/strip-ttxb-storage/strip-form'
+import { StripAndConsolidateForm } from '@/app/ops/strip-and-consolidate-form'
 import { ForceSuccessForm } from '@/app/ops/strip-ttxb-storage/force-success-form'
 import { formatDate } from '@/lib/format-date'
 
@@ -41,7 +41,7 @@ export default async function StripTtxbStoragePage() {
         </p>
       </div>
 
-      <StripForm />
+      <StripAndConsolidateForm area="STORAGE" />
 
       <table className="w-full max-w-2xl text-left text-sm">
         <thead>

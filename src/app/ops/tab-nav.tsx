@@ -26,7 +26,7 @@ const GROUPS = [
     accent: 'border-green-300',
     tabs: [
       { href: '/ops/new-arrival-liquidation', label: '5. New Arrival (Liquidation Area)' },
-      { href: '/ops/strip-liquidation', label: '6. Strip (Liquidation Area)' },
+      { href: '/ops/strip-liquidation', label: '6. Strip & Consolidate (Liquidation Area)' },
     ],
   },
   {

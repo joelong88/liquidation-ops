@@ -16,7 +16,17 @@ const HEADER_ALIASES: Record<string, string> = {
   codvalue: 'cod_value',
   cod_value: 'cod_value',
   cod: 'cod_value',
-  value: 'cod_value',
+  goodsvalue: 'goods_value',
+  goods_value: 'goods_value',
+  goods: 'goods_value',
+  value: 'goods_value',
+  insurancevalue: 'insurance_value',
+  insurance_value: 'insurance_value',
+  insurance: 'insurance_value',
+  xbvalue: 'xb_value_usd',
+  xbvalueusd: 'xb_value_usd',
+  xb_value_usd: 'xb_value_usd',
+  xb: 'xb_value_usd',
   itemdescription: 'item_description',
   item_description: 'item_description',
   description: 'item_description',
@@ -131,8 +141,11 @@ export function CsvUploadForm() {
         </label>
         <p className="text-xs text-neutral-500">
           Columns: <span className="font-mono">tid</span>, <span className="font-mono">status</span>,{' '}
-          <span className="font-mono">cod_value</span>, <span className="font-mono">item_description</span>{' '}
-          (only <span className="font-mono">tid</span> is required; header names are matched loosely).
+          <span className="font-mono">goods_value</span>, <span className="font-mono">cod_value</span>,{' '}
+          <span className="font-mono">insurance_value</span>, <span className="font-mono">xb_value_usd</span>,{' '}
+          <span className="font-mono">item_description</span> (only <span className="font-mono">tid</span> is
+          required; header names are matched loosely). GMV uses goods_value if set, else the higher of
+          cod_value/insurance_value, else xb_value_usd converted to PHP.
         </p>
       </div>
       <input

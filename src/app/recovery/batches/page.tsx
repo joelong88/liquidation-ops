@@ -55,6 +55,16 @@ export default async function BatchesPage() {
     batchNumberById.set(b.batch_id, b.batch_number)
   }
 
+  // A batch bundles multiple pallets into one sale — surface which pallet codes
+  // belong to each batch right in this top-level list, not just on drill-in.
+  const palletCodesByBatch = new Map<number, string[]>()
+  for (const p of allPallets ?? []) {
+    if (p.batch_id == null) continue
+    const codes = palletCodesByBatch.get(p.batch_id) ?? []
+    codes.push(p.pallet_code)
+    palletCodesByBatch.set(p.batch_id, codes)
+  }
+
   const palletRows = (allPallets ?? [])
     .map((p) => {
       const sale = p.batch_id != null ? saleByBatch.get(p.batch_id) : undefined
@@ -93,6 +103,7 @@ export default async function BatchesPage() {
         <thead>
           <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
             <th className="py-2 pr-4">Batch</th>
+            <th className="py-2 pr-4">Pallets</th>
             <th className="py-2 pr-4">Type</th>
             <th className="py-2 pr-4">Status</th>
             <th className="py-2 pr-4">Parcels</th>
@@ -110,6 +121,9 @@ export default async function BatchesPage() {
                 >
                   Batch {b.batch_number}
                 </Link>
+              </td>
+              <td className="py-2 pr-4 font-mono text-xs">
+                {(palletCodesByBatch.get(b.batch_id) ?? []).join(', ') || '—'}
               </td>
               <td className="py-2 pr-4">{b.batch_type}</td>
               <td className="py-2 pr-4">{b.status}</td>

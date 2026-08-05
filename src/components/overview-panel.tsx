@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { serverNow } from '@/lib/now'
-import { formatDateShort, formatDateLong } from '@/lib/format-date'
+import { formatDateShort, formatDateLong, formatDateTime } from '@/lib/format-date'
 
 const RECEIVED_CATEGORY_ORDER = [
   { code: 'LIQUIDATION', label: 'Liquidation' },
@@ -64,24 +64,30 @@ export async function OverviewPanel() {
   const mtdStart = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1))
   const earliestNeeded = new Date(Math.min(sevenDayStart.getTime(), mtdStart.getTime()))
 
-  const [{ data: parcels }, { data: events }, { data: sackEvents }, { data: palletEvents }] = await Promise.all([
-    supabase.from('parcel').select('parcel_category, current_stage, sack:sack_id(area)'),
-    supabase
-      .from('stage_event')
-      .select('stage, event_ts, parcel(parcel_category)')
-      .in('stage', ['RECEIVED', 'IN_STORAGE', 'IN_LIQUIDATION_AREA', 'REPACKED'])
-      .gte('event_ts', earliestNeeded.toISOString()),
-    supabase
-      .from('sack_event')
-      .select('action, event_ts, sack:sack_id(area)')
-      .eq('action', 'STRIPPED')
-      .gte('event_ts', sevenDayStart.toISOString()),
-    supabase
-      .from('pallet_event')
-      .select('action, event_ts')
-      .in('action', ['SACK_ADDED', 'TID_ADDED', 'ENDORSED', 'OUTGOING'])
-      .gte('event_ts', sevenDayStart.toISOString()),
-  ])
+  const [{ data: parcels }, { data: events }, { data: sackEvents }, { data: palletEvents }, { data: stuckAtFirstScan }] =
+    await Promise.all([
+      supabase.from('parcel').select('parcel_category, current_stage, sack:sack_id(area)'),
+      supabase
+        .from('stage_event')
+        .select('stage, event_ts, parcel(parcel_category)')
+        .in('stage', ['RECEIVED', 'IN_STORAGE', 'IN_LIQUIDATION_AREA', 'REPACKED'])
+        .gte('event_ts', earliestNeeded.toISOString()),
+      supabase
+        .from('sack_event')
+        .select('action, event_ts, sack:sack_id(area)')
+        .eq('action', 'STRIPPED')
+        .gte('event_ts', sevenDayStart.toISOString()),
+      supabase
+        .from('pallet_event')
+        .select('action, event_ts')
+        .in('action', ['SACK_ADDED', 'TID_ADDED', 'ENDORSED', 'OUTGOING'])
+        .gte('event_ts', sevenDayStart.toISOString()),
+      supabase
+        .from('parcel')
+        .select('tid, received_at')
+        .eq('current_stage', 'RECEIVED')
+        .order('received_at', { ascending: true }),
+    ])
 
   const parcelRows = (parcels ?? []) as unknown as ParcelRow[]
   const eventRows = (events ?? []) as unknown as StageEventRow[]
@@ -194,6 +200,32 @@ export async function OverviewPanel() {
             TIDs consolidated onto a pallet from Storage (Scan 4) or arrived direct (Scan 5), not yet Outbound
           </div>
         </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          Stuck at First Scan ({stuckAtFirstScan?.length ?? 0}) — not yet fully processed
+        </h3>
+        <p className="text-xs text-neutral-500">
+          TIDs whose last scan was First Scan (Scan 1) — they haven&apos;t yet been inbounded into
+          either area.
+        </p>
+        <ul className="max-h-48 max-w-md overflow-y-auto rounded-md border border-neutral-200 text-xs">
+          {(stuckAtFirstScan ?? []).map((p) => (
+            <li
+              key={p.tid}
+              className="flex items-center justify-between border-b border-neutral-100 px-3 py-1.5 last:border-b-0"
+            >
+              <span className="font-mono">{p.tid}</span>
+              <span className="text-neutral-500">
+                {p.received_at ? formatDateTime(p.received_at) : '—'}
+              </span>
+            </li>
+          ))}
+          {(stuckAtFirstScan ?? []).length === 0 && (
+            <li className="px-3 py-1.5 text-neutral-400">None — everything has moved past First Scan.</li>
+          )}
+        </ul>
       </section>
 
       <section className="flex flex-col gap-2">

@@ -27,11 +27,18 @@ export default async function ScanHistoryPage() {
   }
 
   const supabase = await createClient()
-  const { data: events, error } = await supabase
-    .from('stage_event')
-    .select('event_id, tid, stage, event_ts')
-    .order('event_ts', { ascending: false })
-    .limit(50)
+  const [{ data: events, error }, { data: profiles }] = await Promise.all([
+    supabase
+      .from('stage_event')
+      .select('event_id, tid, stage, event_ts, scanned_by')
+      .order('event_ts', { ascending: false })
+      .limit(50),
+    supabase.from('profile').select('id, full_name'),
+  ])
+
+  // scanned_by references auth.users directly (not profile), so there's no FK
+  // PostgREST can embed through — join by hand instead.
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]))
 
   return (
     <main className="flex min-h-screen flex-col gap-4 p-6">
@@ -43,6 +50,7 @@ export default async function ScanHistoryPage() {
           <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
             <th className="py-2 pr-4">TID</th>
             <th className="py-2 pr-4">Scan</th>
+            <th className="py-2 pr-4">Scanned by</th>
             <th className="py-2">When (SGT)</th>
           </tr>
         </thead>
@@ -51,6 +59,9 @@ export default async function ScanHistoryPage() {
             <tr key={e.event_id} className="border-b border-neutral-100">
               <td className="py-2 pr-4 font-mono">{e.tid}</td>
               <td className="py-2 pr-4">{STAGE_TO_SCAN[e.stage] ?? e.stage}</td>
+              <td className="py-2 pr-4">
+                {e.scanned_by ? (nameById.get(e.scanned_by) ?? 'Unknown account') : '—'}
+              </td>
               <td className="py-2">{formatDateTime(e.event_ts)}</td>
             </tr>
           ))}

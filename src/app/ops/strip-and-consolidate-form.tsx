@@ -5,12 +5,16 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatDateTime } from '@/lib/format-date'
 
+type Area = 'STORAGE' | 'LIQUIDATION'
 type Preview = { sackCode: string; tids: string[]; alreadyStripped: boolean } | null
 type LogEntry = { id: number; sackCode: string; status: 'success' | 'error'; message: string }
 let logId = 0
 
-export function StripForm() {
+const AREA_LABEL: Record<Area, string> = { STORAGE: 'TTXB Storage', LIQUIDATION: 'Liquidation Area' }
+
+export function StripAndConsolidateForm({ area }: { area: Area }) {
   const router = useRouter()
+  const areaLabel = AREA_LABEL[area]
   const [palletCode, setPalletCode] = useState('')
   const [closingPallet, setClosingPallet] = useState(false)
   const [sackCode, setSackCode] = useState('')
@@ -45,18 +49,21 @@ export function StripForm() {
       .from('sack')
       .select('sack_id, status')
       .eq('sack_code', value)
-      .eq('area', 'STORAGE')
+      .eq('area', area)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
     if (sackError || !sackRow) {
-      setBanner({ ok: false, message: 'No TTXB Storage sack with that code.' })
+      setBanner({ ok: false, message: `No ${areaLabel} sack with that code.` })
       setLooking(false)
       return
     }
     if (sackRow.status === 'OPEN') {
-      setBanner({ ok: false, message: 'This sack is still open — close it at the Storage inbound station first.' })
+      setBanner({
+        ok: false,
+        message: `This sack is still open — close it at the ${areaLabel} inbound station first.`,
+      })
       setLooking(false)
       return
     }
@@ -89,7 +96,7 @@ export function StripForm() {
     if (!preview.alreadyStripped) {
       const { data, error } = await supabase.rpc('strip_sack', {
         p_sack_code: preview.sackCode,
-        p_area: 'STORAGE',
+        p_area: area,
       })
 
       if (error) {
@@ -106,7 +113,7 @@ export function StripForm() {
           result.error === 'hold_not_matured'
             ? `Hold not matured until ${result.hold_until ? formatDateTime(result.hold_until) : 'unknown'}. Force-success below.`
             : result.error === 'not_found'
-              ? 'No closed Storage sack with that code.'
+              ? `No closed ${areaLabel} sack with that code.`
               : result.error === 'not_closed'
                 ? 'This sack isn’t closed yet.'
                 : result.error === 'already_stripped'
