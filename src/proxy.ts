@@ -51,7 +51,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip static assets and image optimization; run everywhere else.
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Skip static assets, image optimization, and the platform's /health probe
+    // (it must not redirect to /login, nor hit Supabase on every check);
+    // run everywhere else.
+    '/((?!_next/static|_next/image|favicon.ico|health|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
