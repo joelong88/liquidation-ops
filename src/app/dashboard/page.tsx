@@ -15,7 +15,7 @@ const NAV_LINKS: { href: string; label: string; roles: Role[] }[] = [
   },
   {
     href: '/recovery/batches',
-    label: 'Batches',
+    label: 'Sales',
     roles: ['recovery_team', 'finance_team', 'owner'],
   },
 ]

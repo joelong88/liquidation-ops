@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { formatDateTime } from '@/lib/format-date'
+import { formatDate } from '@/lib/format-date'
+import { playScanSound } from '@/lib/play-scan-sound'
 
 type Area = 'STORAGE' | 'LIQUIDATION'
 type Preview = { sackCode: string; tids: string[]; alreadyStripped: boolean } | null
@@ -23,12 +24,14 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
   const [pending, setPending] = useState(false)
   const [banner, setBanner] = useState<{ ok: boolean; message: string } | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
+  const [confirmingClosePallet, setConfirmingClosePallet] = useState(false)
   const palletRef = useRef<HTMLInputElement>(null)
   const sackRef = useRef<HTMLInputElement>(null)
 
   function pushEntry(code: string, status: LogEntry['status'], message: string) {
     setBanner({ ok: status === 'success', message })
     setLog((prev) => [{ id: logId++, sackCode: code, status, message }, ...prev].slice(0, 15))
+    playScanSound(status)
   }
 
   async function handleLookup(e: React.FormEvent) {
@@ -104,14 +107,14 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
         setPreview(null)
         setSackCode('')
         setPending(false)
-        sackRef.current?.focus()
+        setTimeout(() => sackRef.current?.focus(), 0)
         return
       }
       const result = data as { ok: boolean; error?: string; hold_until?: string }
       if (!result.ok) {
         const message =
           result.error === 'hold_not_matured'
-            ? `Hold not matured until ${result.hold_until ? formatDateTime(result.hold_until) : 'unknown'}. Force-success below.`
+            ? `7 days in TTXB storage only ends at ${result.hold_until ? formatDate(result.hold_until) : 'unknown'}. Force-success below.`
             : result.error === 'not_found'
               ? `No closed ${areaLabel} sack with that code.`
               : result.error === 'not_closed'
@@ -123,7 +126,7 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
         setPreview(null)
         setSackCode('')
         setPending(false)
-        sackRef.current?.focus()
+        setTimeout(() => sackRef.current?.focus(), 0)
         return
       }
     }
@@ -155,34 +158,40 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
     setPreview(null)
     setSackCode('')
     setPending(false)
-    sackRef.current?.focus()
+    setTimeout(() => sackRef.current?.focus(), 0)
   }
 
   async function handleClosePallet() {
     const value = palletCode.trim()
     if (!value || closingPallet) return
     setClosingPallet(true)
+    setConfirmingClosePallet(false)
 
     const supabase = createClient()
     const { data, error } = await supabase.rpc('close_pallet', { p_pallet_code: value })
 
     if (error) {
       setBanner({ ok: false, message: error.message })
+      playScanSound('error')
     } else {
       const result = data as { ok: boolean; error?: string }
       if (result.ok) {
         setBanner({ ok: true, message: `Pallet ${value} closed. Scan a new pallet ID for the next one.` })
         setPalletCode('')
+        playScanSound('success')
       } else if (result.error === 'not_found') {
         setBanner({ ok: false, message: 'No assembling pallet with that code.' })
+        playScanSound('error')
       } else if (result.error === 'already_closed') {
         setBanner({ ok: false, message: 'Already closed.' })
+        playScanSound('error')
       } else {
         setBanner({ ok: false, message: result.error ?? 'Close failed.' })
+        playScanSound('error')
       }
     }
     setClosingPallet(false)
-    palletRef.current?.focus()
+    setTimeout(() => palletRef.current?.focus(), 0)
   }
 
   return (
@@ -207,14 +216,35 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
             placeholder="Scan or type pallet ID, then Enter"
             className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-2xl font-bold font-mono focus:border-neutral-500 focus:outline-none"
           />
-          <button
-            type="button"
-            onClick={handleClosePallet}
-            disabled={!palletCode.trim() || closingPallet}
-            className="whitespace-nowrap rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-40"
-          >
-            {closingPallet ? 'Closing…' : 'Close pallet'}
-          </button>
+          {!confirmingClosePallet ? (
+            <button
+              type="button"
+              onClick={() => setConfirmingClosePallet(true)}
+              disabled={!palletCode.trim() || closingPallet}
+              className="whitespace-nowrap rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-40"
+            >
+              Close pallet
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5">
+              <span className="text-sm font-medium text-amber-900">Are you sure?</span>
+              <button
+                type="button"
+                onClick={handleClosePallet}
+                disabled={closingPallet}
+                className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {closingPallet ? 'Closing…' : 'Yes, close'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingClosePallet(false)}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -252,12 +282,12 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
             <span className="text-sm font-bold text-amber-900">ARE YOU SURE?</span>
             <span className="text-xs text-amber-800">This can&apos;t be undone.</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               type="button"
               onClick={handleConfirm}
               disabled={pending}
-              className="rounded-md bg-amber-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-lg bg-green-600 px-5 py-3 text-base font-semibold text-white disabled:opacity-50"
             >
               {pending
                 ? 'Working…'
@@ -268,7 +298,7 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
             <button
               type="button"
               onClick={() => setPreview(null)}
-              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-600"
+              className="rounded-lg bg-red-600 px-5 py-3 text-base font-semibold text-white"
             >
               Cancel
             </button>

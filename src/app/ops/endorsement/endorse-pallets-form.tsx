@@ -3,8 +3,17 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { formatDateTime } from '@/lib/format-date'
+import { ConfirmButton } from '@/components/confirm-button'
 
-type Pallet = { pallet_id: number; pallet_code: string }
+type Pallet = {
+  pallet_id: number
+  pallet_code: string
+  closed_at: string | null
+  sack_count: number
+  tid_count: number
+  gmv: number
+}
 
 export function EndorsePalletsForm({ pallets }: { pallets: Pallet[] }) {
   const router = useRouter()
@@ -52,37 +61,53 @@ export function EndorsePalletsForm({ pallets }: { pallets: Pallet[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-4">
+    <div className="flex flex-col gap-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-amber-900">
+        <h3 className="text-lg font-semibold text-amber-900">
           Weekly digital endorsement — no scan
         </h3>
-        <button
-          type="button"
-          onClick={handleSubmit}
+        <ConfirmButton
+          onConfirm={handleSubmit}
+          label={`Endorse selected (${selected.size})`}
+          confirmLabel="Yes, endorse"
+          pending={pending}
           disabled={selected.size === 0 || pending}
-          className="rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending ? 'Endorsing…' : `Endorse selected (${selected.size})`}
-        </button>
+          className="rounded-md bg-amber-700 px-4 py-2 text-base font-medium text-white disabled:opacity-50"
+        />
       </div>
-      <div className="flex flex-wrap gap-2">
-        {pallets.map((p) => (
-          <label
-            key={p.pallet_id}
-            className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-mono"
-          >
-            <input
-              type="checkbox"
-              checked={selected.has(p.pallet_id)}
-              onChange={() => toggle(p.pallet_id)}
-            />
-            {p.pallet_code}
-          </label>
-        ))}
-      </div>
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-amber-200 text-xs uppercase tracking-wide text-amber-700">
+            <th className="py-2 pr-3"></th>
+            <th className="py-2 pr-3">Pallet</th>
+            <th className="py-2 pr-3">Closed</th>
+            <th className="py-2 pr-3">Sacks</th>
+            <th className="py-2 pr-3">TIDs</th>
+            <th className="py-2">GMV</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pallets.map((p) => (
+            <tr key={p.pallet_id} className="border-b border-amber-100">
+              <td className="py-2 pr-3">
+                <input
+                  type="checkbox"
+                  checked={selected.has(p.pallet_id)}
+                  onChange={() => toggle(p.pallet_id)}
+                  className="h-4 w-4"
+                />
+              </td>
+              <td className="py-2 pr-3 font-mono font-medium">{p.pallet_code}</td>
+              <td className="py-2 pr-3">{p.closed_at ? formatDateTime(p.closed_at) : '—'}</td>
+              <td className="py-2 pr-3">{p.sack_count}</td>
+              <td className="py-2 pr-3">{p.tid_count}</td>
+              <td className="py-2">₱{p.gmv.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {result && (
-        <p className={result.ok ? 'text-xs text-green-800' : 'text-xs text-red-700'}>
+        <p className={result.ok ? 'text-sm text-green-800' : 'text-sm text-red-700'}>
           {result.message}
         </p>
       )}

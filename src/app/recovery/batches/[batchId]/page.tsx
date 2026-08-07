@@ -67,7 +67,7 @@ export default async function BatchDetailPage({
   return (
     <main className="flex min-h-screen flex-col gap-6 p-6">
       <div>
-        <BackLink href="/recovery/batches" label="Batches" />
+        <BackLink href="/recovery/batches" label="Sales" />
         <h1 className="text-lg font-semibold text-neutral-900">
           Batch {batch.batch_number} <span className="text-neutral-400">({batch.status})</span>
         </h1>
@@ -115,6 +115,12 @@ export default async function BatchDetailPage({
               {sale.payment_status === 'PAID' ? 'Paid' : 'Pending'}
             </div>
           </div>
+          <div className="rounded-md border border-neutral-200 p-3">
+            <div className="text-xs uppercase text-neutral-500">Sale date</div>
+            <div className="text-lg font-semibold">
+              {sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : '—'}
+            </div>
+          </div>
         </div>
       ) : (
         profile.role !== 'finance_team' && <RecordBidForm batchId={batch.batch_id} />
@@ -124,7 +130,7 @@ export default async function BatchDetailPage({
         <h2 className="text-base font-semibold text-neutral-900">Pallets in this batch</h2>
         <p className="text-sm text-neutral-500">
           A batch bundles pallets (not individual TIDs) into one sale — see a pallet&apos;s own
-          TID list on the Batches page&apos;s Pallets table.
+          TID list on the Sales page&apos;s Pallets table.
         </p>
       </div>
       <table className="w-full max-w-2xl text-left text-sm">

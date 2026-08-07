@@ -31,6 +31,24 @@ const HEADER_ALIASES: Record<string, string> = {
   item_description: 'item_description',
   description: 'item_description',
   item: 'item_description',
+  lastpetstype: 'pets_ticket_type',
+  petstype: 'pets_ticket_type',
+  pets_ticket_type: 'pets_ticket_type',
+  tickettype: 'pets_ticket_type',
+  ticket_type: 'pets_ticket_type',
+  lastpetssubtype: 'pets_ticket_subtype',
+  petssubtype: 'pets_ticket_subtype',
+  pets_ticket_subtype: 'pets_ticket_subtype',
+  ticketsubtype: 'pets_ticket_subtype',
+  ticket_subtype: 'pets_ticket_subtype',
+  subtype: 'pets_ticket_subtype',
+  outcome: 'pets_ticket_outcome',
+  orderoutcome: 'pets_ticket_outcome',
+  order_outcome: 'pets_ticket_outcome',
+  pets_ticket_outcome: 'pets_ticket_outcome',
+  shippersegment: 'shipper_segment_raw',
+  shipper_segment: 'shipper_segment_raw',
+  segment: 'shipper_segment_raw',
 }
 
 function parseCsv(text: string): Record<string, string>[] {
@@ -139,14 +157,6 @@ export function CsvUploadForm() {
         <label htmlFor="csvFile" className="text-sm font-medium text-neutral-700">
           Upload CSV
         </label>
-        <p className="text-xs text-neutral-500">
-          Columns: <span className="font-mono">tid</span>, <span className="font-mono">status</span>,{' '}
-          <span className="font-mono">goods_value</span>, <span className="font-mono">cod_value</span>,{' '}
-          <span className="font-mono">insurance_value</span>, <span className="font-mono">xb_value_usd</span>,{' '}
-          <span className="font-mono">item_description</span> (only <span className="font-mono">tid</span> is
-          required; header names are matched loosely). GMV uses goods_value if set, else the higher of
-          cod_value/insurance_value, else xb_value_usd converted to PHP.
-        </p>
       </div>
       <input
         ref={fileRef}

@@ -97,7 +97,7 @@ export default async function BatchesPage() {
   return (
     <main className="flex min-h-screen flex-col gap-4 p-6">
       <BackToDashboard />
-      <h1 className="text-lg font-semibold text-neutral-900">Batches</h1>
+      <h1 className="text-lg font-semibold text-neutral-900">Sales</h1>
       {profile.role !== 'finance_team' && <SellPalletsForm pallets={endorsedPallets ?? []} />}
       <table className="w-full text-left text-sm">
         <thead>

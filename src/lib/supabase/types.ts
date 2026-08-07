@@ -126,6 +126,39 @@ export type Database = {
         }
         Relationships: []
       }
+      csv_upload_log: {
+        Row: {
+          imported_count: number
+          non_ttxb_count: number
+          skipped_count: number
+          total_rows: number
+          ttxb_count: number
+          upload_id: number
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          imported_count?: number
+          non_ttxb_count?: number
+          skipped_count?: number
+          total_rows?: number
+          ttxb_count?: number
+          upload_id?: number
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          imported_count?: number
+          non_ttxb_count?: number
+          skipped_count?: number
+          total_rows?: number
+          ttxb_count?: number
+          upload_id?: number
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       expected_arrival: {
         Row: {
           id: number
@@ -532,6 +565,10 @@ export type Database = {
           imported_by: string | null
           insurance_value: number | null
           item_description: string | null
+          pets_ticket_outcome: string | null
+          pets_ticket_subtype: string | null
+          pets_ticket_type: string | null
+          shipper_segment_raw: string | null
           tid: string
           xb_value_usd: number | null
         }
@@ -544,6 +581,10 @@ export type Database = {
           imported_by?: string | null
           insurance_value?: number | null
           item_description?: string | null
+          pets_ticket_outcome?: string | null
+          pets_ticket_subtype?: string | null
+          pets_ticket_type?: string | null
+          shipper_segment_raw?: string | null
           tid: string
           xb_value_usd?: number | null
         }
@@ -556,6 +597,10 @@ export type Database = {
           imported_by?: string | null
           insurance_value?: number | null
           item_description?: string | null
+          pets_ticket_outcome?: string | null
+          pets_ticket_subtype?: string | null
+          pets_ticket_type?: string | null
+          shipper_segment_raw?: string | null
           tid?: string
           xb_value_usd?: number | null
         }
@@ -563,18 +608,21 @@ export type Database = {
       }
       profile: {
         Row: {
+          email: string | null
           full_name: string | null
           id: string
           is_active: boolean
           role: string
         }
         Insert: {
+          email?: string | null
           full_name?: string | null
           id: string
           is_active?: boolean
           role: string
         }
         Update: {
+          email?: string | null
           full_name?: string | null
           id?: string
           is_active?: boolean
@@ -841,6 +889,7 @@ export type Database = {
           payment_date: string | null
           payment_status: string
           sale_amount: number
+          sale_date: string
           sale_id: number
           tid: string | null
         }
@@ -854,6 +903,7 @@ export type Database = {
           payment_date?: string | null
           payment_status?: string
           sale_amount: number
+          sale_date?: string
           sale_id?: number
           tid?: string | null
         }
@@ -867,6 +917,7 @@ export type Database = {
           payment_date?: string | null
           payment_status?: string
           sale_amount?: number
+          sale_date?: string
           sale_id?: number
           tid?: string | null
         }
@@ -996,6 +1047,7 @@ export type Database = {
         }
         Returns: Json
       }
+      blank_or_zero: { Args: { p_val: string }; Returns: string }
       close_pallet: {
         Args: { p_pallet_code: string; p_station?: string }
         Returns: Json
@@ -1032,6 +1084,7 @@ export type Database = {
         Returns: Json
       }
       import_parcel_rows: { Args: { p_rows: Json }; Returns: Json }
+      normalize_shipper_segment: { Args: { p_raw: string }; Returns: string }
       recompute_batch_pricing: {
         Args: { p_batch_id: number }
         Returns: undefined
@@ -1050,6 +1103,7 @@ export type Database = {
           p_batch_id: number
           p_buyer_name: string
           p_sale_amount: number
+          p_sale_date?: string
         }
         Returns: Json
       }
@@ -1077,6 +1131,7 @@ export type Database = {
           p_buyer_name: string
           p_pallet_ids: number[]
           p_sale_amount: number
+          p_sale_date?: string
         }
         Returns: Json
       }
