@@ -1,0 +1,15 @@
+# Backend image for the Substrait deploy contract: this app is Next.js-only (no
+# separate frontend/), so the platform routes all traffic here. The server must
+# listen on 8000 and answer GET /health (the readiness probe).
+FROM node:22-bookworm-slim
+
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY . .
+RUN npm ci && npm run build
+
+# `next start` reads PORT and binds 0.0.0.0.
+ENV PORT=8000
+EXPOSE 8000
+CMD ["npm", "run", "start"]
