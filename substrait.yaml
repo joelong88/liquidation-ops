@@ -1,0 +1,5 @@
+description: >
+  Warehouse operations app for a 3PL parcel-liquidation process (NinjaVan Philippines).
+  Tracks undelivered parcels from intake scan through TTXB storage, sack/pallet
+  consolidation, endorsement, and sale, with a live inventory/GMV dashboard. Used by
+  warehouse floor operators, the recovery team, and finance.

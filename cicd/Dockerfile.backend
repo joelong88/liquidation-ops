@@ -1,0 +1,26 @@
+# Substrait backend contract: EXPOSE 8000, serve GET /health (200), serve any true
+# API under /api. This is Next.js itself acting as the whole app (backend-only —
+# no separate frontend/ shipped), using `output: "standalone"` (next.config.ts) so
+# the runtime image only needs the trimmed server bundle, not full node_modules.
+
+FROM node:24-slim AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:24-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8000
+ENV HOSTNAME=0.0.0.0
+
+# Standalone output does not include .next/static or public/ automatically —
+# each needs its own explicit copy on top of the trimmed server bundle.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+EXPOSE 8000
+CMD ["node", "server.js"]

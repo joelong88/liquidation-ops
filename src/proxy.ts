@@ -10,7 +10,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 // is enforced by RLS policies and inside each Server Action/page, not here — Next.js
 // explicitly warns that Server Function calls can bypass a route's proxy matcher, so
 // proxy alone must never be the only authorization check.
-const PUBLIC_PATHS = ['/login']
+//
+// /health must always stay public — it's Substrait's container readiness probe, and
+// a redirect-to-login instead of 200 would fail the deploy outright. /api/whoami is
+// public for the same Phase-A reason: it exists to prove the platform's SSO header
+// injection works before any real user is logged in via Supabase.
+const PUBLIC_PATHS = ['/login', '/health', '/api/whoami']
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
