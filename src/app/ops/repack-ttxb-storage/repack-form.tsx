@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { playScanSound } from '@/lib/play-scan-sound'
 
 type LogEntry = { id: number; tid: string; status: 'success' | 'error'; message: string }
 let logId = 0
@@ -49,9 +50,10 @@ export function RepackForm() {
 
     setBanner({ ok, message })
     pushEntry(value, ok ? 'success' : 'error', message)
+    playScanSound(ok ? 'success' : 'error')
     setTid('')
     setPending(false)
-    tidRef.current?.focus()
+    setTimeout(() => tidRef.current?.focus(), 0)
   }
 
   return (
@@ -68,6 +70,7 @@ export function RepackForm() {
           autoFocus
           autoComplete="off"
           disabled={pending}
+          maxLength={30}
           placeholder="Scan or type TID, then Enter"
           className="rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
         />

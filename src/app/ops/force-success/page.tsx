@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { CsvDownloadButton } from '@/app/ops/force-success/csv-download-button'
+import { formatDate } from '@/lib/format-date'
 
 export default async function ForceSuccessPage() {
   const supabase = await createClient()
@@ -61,7 +62,7 @@ export default async function ForceSuccessPage() {
               <td className="py-2 pr-4">{p.current_stage}</td>
               <td className="py-2 pr-4">{p.granular_status ?? '—'}</td>
               <td className="py-2">
-                {p.output_resolved_at ? new Date(p.output_resolved_at).toLocaleDateString() : '—'}
+                {p.output_resolved_at ? formatDate(p.output_resolved_at) : '—'}
               </td>
             </tr>
           ))}

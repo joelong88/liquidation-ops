@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { serverNow } from '@/lib/now'
-import { StripForm } from '@/app/ops/strip-ttxb-storage/strip-form'
+import { StripAndConsolidateForm } from '@/app/ops/strip-and-consolidate-form'
 import { ForceSuccessForm } from '@/app/ops/strip-ttxb-storage/force-success-form'
+import { formatDate } from '@/lib/format-date'
 
 export default async function StripTtxbStoragePage() {
   const supabase = await createClient()
@@ -29,16 +30,18 @@ export default async function StripTtxbStoragePage() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-base font-semibold text-neutral-900">
-          Stripping from TTXB Storage Area
+          Strip &amp; Consolidate — TTXB Storage Area
         </h2>
         <p className="text-sm text-neutral-500">
-          Sack-level scan, hold-gated. Only closed sacks (sealed at the inbound station) can be
-          stripped — the list below shows those, sorted by maturity. Force success if a sack
-          needs to strip before its 7-day hold matures.
+          Sack-level scan, hold-gated. Scan a pallet ID once, then scan each closed sack — it
+          gets stripped and added straight onto that pallet in one confirmation. Close the
+          pallet once it&apos;s full to start a new one. The list below shows closed sacks
+          awaiting strip, sorted by maturity — force success if one needs to strip before its
+          7-day hold matures.
         </p>
       </div>
 
-      <StripForm />
+      <StripAndConsolidateForm area="STORAGE" />
 
       <table className="w-full max-w-2xl text-left text-sm">
         <thead>
@@ -61,7 +64,7 @@ export default async function StripTtxbStoragePage() {
                 <td className="py-2 pr-4">{s.shipper_segment ?? '—'}</td>
                 <td className="py-2 pr-4">{countBySack.get(s.sack_id) ?? 0}</td>
                 <td className="py-2 pr-4">
-                  {s.hold_until ? new Date(s.hold_until).toLocaleDateString() : '—'}
+                  {s.hold_until ? formatDate(s.hold_until) : '—'}
                 </td>
                 <td className="py-2 pr-4">
                   {eligible ? (

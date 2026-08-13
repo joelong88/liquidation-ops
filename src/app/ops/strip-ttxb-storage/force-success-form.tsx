@@ -56,6 +56,9 @@ export function ForceSuccessForm({ sackCode }: { sackCode: string }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-1">
+      <p className="text-xs font-medium text-amber-800">
+        This bypasses the 7-day hold and is audited — are you sure?
+      </p>
       <input
         value={reason}
         onChange={(e) => setReason(e.target.value)}
@@ -69,7 +72,7 @@ export function ForceSuccessForm({ sackCode }: { sackCode: string }) {
           disabled={pending || !reason.trim()}
           className="rounded-md bg-amber-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
         >
-          Confirm
+          {pending ? 'Working…' : 'Yes, force success'}
         </button>
         <button
           type="button"

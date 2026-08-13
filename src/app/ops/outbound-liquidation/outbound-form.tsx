@@ -2,26 +2,37 @@
 
 import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { playScanSound } from '@/lib/play-scan-sound'
 
 export function OutboundForm() {
   const [palletCode, setPalletCode] = useState('')
+  const [confirmingCode, setConfirmingCode] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [banner, setBanner] = useState<{ ok: boolean; message: string } | null>(null)
   const palletRef = useRef<HTMLInputElement>(null)
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const value = palletCode.trim()
     if (!value || pending) return
+    setConfirmingCode(value)
+  }
+
+  async function doSubmit() {
+    const value = confirmingCode
+    if (!value || pending) return
+    setConfirmingCode(null)
 
     setPending(true)
     const supabase = createClient()
     const { data, error } = await supabase.rpc('record_pallet_outbound', { p_pallet_code: value })
 
+    let ok = false
     if (error) {
       setBanner({ ok: false, message: error.message })
     } else {
       const result = data as { ok: boolean; error?: string; status?: string }
+      ok = result.ok
       if (result.ok) {
         setBanner({ ok: true, message: 'Pallet exit recorded.' })
       } else if (result.error === 'not_found') {
@@ -34,9 +45,10 @@ export function OutboundForm() {
         setBanner({ ok: false, message: result.error ?? 'Failed.' })
       }
     }
+    playScanSound(ok ? 'success' : 'error')
     setPalletCode('')
     setPending(false)
-    palletRef.current?.focus()
+    setTimeout(() => palletRef.current?.focus(), 0)
   }
 
   return (
@@ -52,11 +64,37 @@ export function OutboundForm() {
           onChange={(e) => setPalletCode(e.target.value)}
           autoFocus
           autoComplete="off"
-          disabled={pending}
+          disabled={pending || confirmingCode != null}
           placeholder="Scan or type pallet ID, then Enter"
           className="rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
         />
       </form>
+      {confirmingCode != null && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+          <span className="text-sm font-medium text-amber-900">
+            Record pallet <span className="font-mono">{confirmingCode}</span> as outbound — are you sure?
+          </span>
+          <button
+            type="button"
+            onClick={doSubmit}
+            disabled={pending}
+            className="whitespace-nowrap rounded-md bg-green-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {pending ? 'Working…' : 'Yes, record exit'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmingCode(null)
+              setPalletCode('')
+              setTimeout(() => palletRef.current?.focus(), 0)
+            }}
+            className="whitespace-nowrap rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       {banner && (
         <div
           className={`rounded-md border px-3 py-2 text-sm ${

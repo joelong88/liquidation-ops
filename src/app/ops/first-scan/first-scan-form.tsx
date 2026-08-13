@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { formatDateTime } from '@/lib/format-date'
+import { playScanSound } from '@/lib/play-scan-sound'
 
 type Bin = { code: string; label: string; area: string | null; is_hvi: boolean }
 
@@ -14,19 +16,20 @@ type BinResult = {
   is_hvi?: boolean | null
   matched_rule?: number | null
   event_ts?: string
+  duplicate?: boolean
 }
 
 const BIN_COLORS: Record<string, string> = {
   A: 'border-blue-400 bg-blue-50 text-blue-900',
-  B: 'border-blue-300 bg-blue-50 text-blue-800',
-  C: 'border-green-400 bg-green-50 text-green-900',
-  D: 'border-green-300 bg-green-50 text-green-800',
+  B: 'border-indigo-400 bg-indigo-50 text-indigo-900',
+  C: 'border-teal-400 bg-teal-50 text-teal-900',
+  D: 'border-green-400 bg-green-50 text-green-900',
   E: 'border-amber-400 bg-amber-50 text-amber-900',
   F: 'border-red-400 bg-red-50 text-red-900',
   G: 'border-purple-400 bg-purple-50 text-purple-900',
 }
 
-export function FirstScanForm({ bins }: { bins: Bin[] }) {
+export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshold: number }) {
   const [tid, setTid] = useState('')
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<BinResult | null>(null)
@@ -44,14 +47,19 @@ export function FirstScanForm({ bins }: { bins: Bin[] }) {
 
     if (error) {
       setResult({ ok: false, error: error.message })
+      playScanSound('error')
     } else {
-      setResult(data as BinResult)
+      const r = data as BinResult
+      setResult(r)
+      playScanSound(r.ok ? 'success' : 'error')
     }
     setScannedTid(value)
     setTid('')
     setPending(false)
-    tidRef.current?.focus()
+    setTimeout(() => tidRef.current?.focus(), 0)
   }
+
+  const showBinBox = result && (result.ok || result.duplicate)
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
@@ -68,6 +76,7 @@ export function FirstScanForm({ bins }: { bins: Bin[] }) {
             autoFocus
             autoComplete="off"
             disabled={pending}
+            maxLength={30}
             placeholder="Scan or type TID, then Enter"
             className="rounded-md border border-neutral-300 px-4 py-4 text-2xl font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
           />
@@ -76,24 +85,21 @@ export function FirstScanForm({ bins }: { bins: Bin[] }) {
         {result && (
           <div
             className={`flex min-h-[320px] flex-col items-center justify-center gap-2 rounded-lg border-4 p-8 text-center ${
-              result.ok ? BIN_COLORS[result.bin ?? 'F'] : 'border-red-400 bg-red-50 text-red-900'
+              showBinBox ? BIN_COLORS[result.bin ?? 'F'] : 'border-red-400 bg-red-50 text-red-900'
             }`}
           >
-            {!result.ok ? (
-              <>
-                <div className="text-lg font-semibold">
-                  {result.error === 'duplicate'
-                    ? 'Already first-scanned'
-                    : (result.error ?? 'Scan failed')}
-                </div>
-                {result.error === 'duplicate' && result.event_ts && (
-                  <div className="text-sm opacity-80">{new Date(result.event_ts).toLocaleString()}</div>
-                )}
-              </>
+            {!showBinBox ? (
+              <div className="text-lg font-semibold">{result.error ?? 'Scan failed'}</div>
             ) : (
               <>
-                <div className="font-mono text-base opacity-70">{scannedTid}</div>
-                <div className="text-8xl font-black leading-none">{result.bin}</div>
+                {result.duplicate && (
+                  <div className="mb-1 rounded-full bg-white/70 px-3 py-1 text-sm font-semibold">
+                    ⚠ Already scanned before
+                    {result.event_ts && ` — ${formatDateTime(result.event_ts)}`}
+                  </div>
+                )}
+                <div className="font-mono text-4xl font-bold opacity-80">{scannedTid}</div>
+                <div className="text-9xl font-black leading-none">{result.bin}</div>
                 <div className="text-2xl font-semibold">{result.bin_label}</div>
                 {result.area && <div className="text-base opacity-80">Carry to: {result.area}</div>}
                 {result.is_hvi != null && (
@@ -121,6 +127,18 @@ export function FirstScanForm({ bins }: { bins: Bin[] }) {
             </li>
           ))}
         </ul>
+        <div className="mt-3 flex flex-col gap-1 text-xs text-neutral-500">
+          <p>
+            <span className="font-semibold">GMV</span> uses goods value if set, else the higher of
+            COD/insurance value, else cross-border (USD) value converted to PHP at{' '}
+            <span className="font-semibold">1 USD = ₱61.45</span> (fixed rate).
+          </p>
+          <p>
+            <span className="font-semibold">HVI threshold:</span> GMV ≥{' '}
+            <span className="font-semibold">₱{hviThreshold.toLocaleString()}</span> classifies as
+            HVI (bin A or C).
+          </p>
+        </div>
       </div>
     </div>
   )

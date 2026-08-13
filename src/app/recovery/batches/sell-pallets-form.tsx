@@ -6,11 +6,24 @@ import { createClient } from '@/lib/supabase/client'
 
 type Pallet = { pallet_id: number; pallet_code: string }
 
+function todayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatWithCommas(digits: string) {
+  if (!digits) return ''
+  const [whole, frac] = digits.split('.')
+  const withCommas = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return frac !== undefined ? `${withCommas}.${frac}` : withCommas
+}
+
 export function SellPalletsForm({ pallets }: { pallets: Pallet[] }) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [buyerName, setBuyerName] = useState('')
-  const [amount, setAmount] = useState('')
+  const [amountDisplay, setAmountDisplay] = useState('')
+  const [saleDate, setSaleDate] = useState(todayIso())
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
 
@@ -23,17 +36,29 @@ export function SellPalletsForm({ pallets }: { pallets: Pallet[] }) {
     })
   }
 
+  function handleAmountChange(raw: string) {
+    // Keep only digits and a single decimal point, then re-add thousands commas.
+    let cleaned = raw.replace(/[^0-9.]/g, '')
+    const firstDot = cleaned.indexOf('.')
+    if (firstDot !== -1) {
+      cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
+    }
+    setAmountDisplay(formatWithCommas(cleaned))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (selected.size === 0 || pending) return
     setPending(true)
     setResult(null)
 
+    const amount = Number(amountDisplay.replace(/,/g, ''))
     const supabase = createClient()
     const { data, error } = await supabase.rpc('record_pallet_sale', {
       p_pallet_ids: Array.from(selected),
       p_buyer_name: buyerName,
-      p_sale_amount: Number(amount),
+      p_sale_amount: amount,
+      p_sale_date: saleDate,
     })
 
     if (error) {
@@ -57,7 +82,8 @@ export function SellPalletsForm({ pallets }: { pallets: Pallet[] }) {
         })
         setSelected(new Set())
         setBuyerName('')
-        setAmount('')
+        setAmountDisplay('')
+        setSaleDate(todayIso())
         router.refresh()
       }
     }
@@ -71,16 +97,21 @@ export function SellPalletsForm({ pallets }: { pallets: Pallet[] }) {
       onSubmit={handleSubmit}
       className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4"
     >
-      <h2 className="text-sm font-semibold text-neutral-900">
-        Sell endorsed pallets (bundle one or more into a batch)
+      <h2 className="text-base font-semibold text-neutral-900">
+        Record Sale <span className="font-normal text-neutral-500">(bundle one or more endorsed pallets into a batch)</span>
       </h2>
       <div className="flex flex-wrap gap-2">
         {pallets.map((p) => (
           <label
             key={p.pallet_id}
-            className="flex items-center gap-1.5 rounded-md border border-neutral-300 px-2 py-1 text-xs font-mono"
+            className="flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-mono"
           >
-            <input type="checkbox" checked={selected.has(p.pallet_id)} onChange={() => toggle(p.pallet_id)} />
+            <input
+              type="checkbox"
+              checked={selected.has(p.pallet_id)}
+              onChange={() => toggle(p.pallet_id)}
+              className="h-5 w-5"
+            />
             {p.pallet_code}
           </label>
         ))}
@@ -104,11 +135,23 @@ export function SellPalletsForm({ pallets }: { pallets: Pallet[] }) {
           </label>
           <input
             id="sellAmount"
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+            value={amountDisplay}
+            onChange={(e) => handleAmountChange(e.target.value)}
+            placeholder="35,000"
+            required
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="saleDate" className="text-sm font-medium text-neutral-700">
+            Sale date
+          </label>
+          <input
+            id="saleDate"
+            type="date"
+            value={saleDate}
+            onChange={(e) => setSaleDate(e.target.value)}
             required
             className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
           />
