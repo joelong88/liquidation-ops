@@ -2,6 +2,25 @@ import { createClient } from '@/lib/supabase/server'
 import { serverNow } from '@/lib/now'
 import { formatDateShort, formatDateLong, formatDateTime } from '@/lib/format-date'
 import { TtxbInventoryBox } from '@/components/ttxb-inventory-box'
+import { OverviewCanvas, Card, CardHeader, StatCard, StageFunnelStrip, ProgressBarRow } from '@/components/overview-ui'
+import { OverviewDateFilter } from '@/components/overview-date-filter'
+import { OverviewDownloadButton } from '@/components/overview-download-button'
+import { Suspense } from 'react'
+
+// Mirrors ref_stage's seq_order — the "pipeline" a parcel moves through end to end.
+// Color follows the same red(new/urgent) -> amber(in progress) -> green(done well) ->
+// gray(shipped out) convention used for the funnel strip.
+const STAGE_META = [
+  { code: 'RECEIVED', label: 'First Scan', color: 'bg-red-500' },
+  { code: 'IN_STORAGE', label: 'TTXB Storage', color: 'bg-amber-500' },
+  { code: 'IN_LIQUIDATION_AREA', label: 'Liquidation Inbound', color: 'bg-amber-500' },
+  { code: 'REPACKED', label: 'Repacked', color: 'bg-amber-500' },
+  { code: 'STRIPPED', label: 'Stripped', color: 'bg-amber-500' },
+  { code: 'ON_PALLET', label: 'On Pallet', color: 'bg-amber-500' },
+  { code: 'ENDORSED', label: 'Endorsed', color: 'bg-amber-500' },
+  { code: 'SOLD', label: 'Sold', color: 'bg-emerald-600' },
+  { code: 'OUTGOING', label: 'Outbound', color: 'bg-neutral-400' },
+] as const
 
 const RECEIVED_CATEGORY_ORDER = [
   { code: 'LIQUIDATION', label: 'Liquidation' },
@@ -77,15 +96,25 @@ function dayKey(iso: string) {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' })
 }
 
-export async function OverviewPanel() {
+export async function OverviewPanel({ from, to }: { from?: string; to?: string } = {}) {
   const supabase = await createClient()
   const now = serverNow()
   const nowDate = new Date(now)
   const sevenDayStart = new Date(now - 7 * 24 * 60 * 60 * 1000)
   const mtdStart = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1))
-  const earliestNeeded = new Date(Math.min(sevenDayStart.getTime(), mtdStart.getTime()))
   const todayStart = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate()))
   const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000)
+
+  // Date-range filter (URL-driven, defaults to the last 7 SGT calendar days) — drives
+  // the "Category breakdown" panel and the full-data export below.
+  const defaultFromStr = dayKey(sevenDayStart.toISOString())
+  const defaultToStr = dayKey(nowDate.toISOString())
+  const rangeFromStr = from ?? defaultFromStr
+  const rangeToStr = to ?? defaultToStr
+  const rangeStart = new Date(`${rangeFromStr}T00:00:00+08:00`)
+  const rangeEnd = new Date(`${rangeToStr}T23:59:59+08:00`)
+
+  const earliestNeeded = new Date(Math.min(sevenDayStart.getTime(), mtdStart.getTime(), rangeStart.getTime()))
   // Week-to-date (Productivity) means "since Monday this week", distinct from the
   // rolling last-7-days window the rest of the page uses for "this week".
   const dayOfWeek = nowDate.getUTCDay()
@@ -313,40 +342,166 @@ export async function OverviewPanel() {
     return { total: inWindow.length, byCategory }
   }
 
+  function receivedCountsBetween(start: Date, end: Date) {
+    const inWindow = eventRows.filter((e) => {
+      const t = new Date(e.event_ts).getTime()
+      return e.stage === 'RECEIVED' && t >= start.getTime() && t <= end.getTime()
+    })
+    const byCategory = RECEIVED_CATEGORY_ORDER.map(({ code, label }) => ({
+      code,
+      label,
+      count: inWindow.filter((e) => e.parcel?.parcel_category === code).length,
+    }))
+    return { total: inWindow.length, byCategory }
+  }
+
   const today = receivedCountsSince(todayStart)
   const last7 = receivedCountsSince(sevenDayStart)
   const mtd = receivedCountsSince(mtdStart)
+  const rangeCategoryData = receivedCountsBetween(rangeStart, rangeEnd)
+  const maxRangeCategoryCount = Math.max(1, ...rangeCategoryData.byCategory.map((c) => c.count))
 
   const todayLabel = formatDateLong(nowDate)
   const last7Label = `Last 7 days (${formatDateShort(sevenDayStart)} – ${formatDateShort(nowDate)})`
   const mtdLabel = `Month to date (${formatDateShort(mtdStart)} – ${formatDateShort(nowDate)})`
 
+  const stageCounts = STAGE_META.map((s) => {
+    const rows = parcelRows.filter((p) => p.current_stage === s.code)
+    return { ...s, count: rows.length, gmv: gmvOf(rows) }
+  })
+  const maxStageCount = Math.max(1, ...stageCounts.map((s) => s.count))
+  const totalGmv = gmvOf(ttxbStorageParcels) + gmvOf(liquidationParcels)
+
+  // Everything currently on the page, flattened into CSV sections for the "download
+  // all" export — one file, sections divided by a "## Title" marker row (a real
+  // multi-tab workbook needs an xlsx library; see overview-download-button.tsx for
+  // why that's not used here).
+  const csvSections = [
+    {
+      title: 'Inventory Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['TTXB Storage - Count', ttxbStorageParcels.length],
+        ['TTXB Storage - GMV', gmvOf(ttxbStorageParcels)],
+        ['TTXB Storage - Backlog (>8 days)', ttxbBacklogCount],
+        ['Liquidation Area - Count', liquidationParcels.length],
+        ['Liquidation Area - GMV', gmvOf(liquidationParcels)],
+        ['Liquidation Area - Not Sold Count', liquidationNotSoldParcels.length],
+        ['Liquidation Area - Not Sold GMV', gmvOf(liquidationNotSoldParcels)],
+        ['Liquidation Area - Sold Count', liquidationSoldParcels.length],
+        ['Liquidation Area - Sold GMV', gmvOf(liquidationSoldParcels)],
+        ['Liquidation Area - Avg Not-Sold Age (days)', avgNotSoldAgeDays != null ? avgNotSoldAgeDays.toFixed(1) : ''],
+        ['Liquidation Area - Oldest Not-Sold Age (days)', oldestNotSoldAgeDays != null ? oldestNotSoldAgeDays.toFixed(1) : ''],
+        ['Liquidation Area - Avg Time to Sale (days)', avgTimeToSaleDays != null ? avgTimeToSaleDays.toFixed(1) : ''],
+        ['Total Inventory GMV', totalGmv],
+      ] as (string | number)[][],
+    },
+    {
+      title: 'TTXB Storage - Daily Entries (last 7 days)',
+      headers: ['Date', 'Days in Storage', 'TIDs Entered'],
+      rows: ttxbDailyEntries.map((d) => [d.date, d.daysAgo, d.count]) as (string | number)[][],
+    },
+    {
+      title: 'Pipeline by Stage',
+      headers: ['Stage', 'Count', 'GMV'],
+      rows: stageCounts.map((s) => [s.label, s.count, s.gmv]) as (string | number)[][],
+    },
+    {
+      title: `Category Breakdown (${rangeFromStr} to ${rangeToStr})`,
+      headers: ['Category', 'Count'],
+      rows: [
+        ['Total', rangeCategoryData.total],
+        ...rangeCategoryData.byCategory.map((c) => [c.label, c.count]),
+      ] as (string | number)[][],
+    },
+    {
+      title: 'Stuck at First Scan',
+      headers: ['TID', 'Received At'],
+      rows: (stuckAtFirstScan ?? []).map((p) => [p.tid, p.received_at ? formatDateTime(p.received_at) : '']) as (
+        | string
+        | number
+      )[][],
+    },
+    {
+      title: 'Activity (Today / This Week)',
+      headers: ['Station', 'Grain', 'Today', 'This Week'],
+      rows: activityCounts.map((a) => [a.label, a.grain, a.today, a.week]) as (string | number)[][],
+    },
+    {
+      title: 'Productivity Summary',
+      headers: ['Account', 'Today', 'WTD', 'MTD'],
+      rows: productivity.map((p) => [p.email, p.todayTotal, p.weekTotal, p.monthTotal]) as (string | number)[][],
+    },
+    {
+      title: 'Productivity by Scan Type',
+      headers: ['Account', 'Scan', 'Today', 'WTD', 'MTD'],
+      rows: productivity.flatMap((p) =>
+        p.byActivity.filter((a) => a.month > 0).map((a) => [p.email, a.label, a.today, a.week, a.month])
+      ) as (string | number)[][],
+    },
+    {
+      title: 'Facility Breakdown',
+      headers: ['Facility / Stage', 'Parcels'],
+      rows: Array.from(facilityCounts.entries()) as (string | number)[][],
+    },
+    {
+      title: `Category - ${todayLabel}`,
+      headers: ['Category', 'Count'],
+      rows: [['Total', today.total], ...today.byCategory.map((c) => [c.label, c.count])] as (string | number)[][],
+    },
+    {
+      title: `Category - ${last7Label}`,
+      headers: ['Category', 'Count'],
+      rows: [['Total', last7.total], ...last7.byCategory.map((c) => [c.label, c.count])] as (string | number)[][],
+    },
+    {
+      title: `Category - ${mtdLabel}`,
+      headers: ['Category', 'Count'],
+      rows: [['Total', mtd.total], ...mtd.byCategory.map((c) => [c.label, c.count])] as (string | number)[][],
+    },
+  ]
+
   return (
-    <div className="flex flex-col gap-8">
+    <OverviewCanvas>
       <div>
-        <h2 className="text-base font-semibold text-neutral-900">Overview</h2>
+        <span className="text-xs font-bold uppercase tracking-wide text-red-600">Live dashboard</span>
+        <h2 className="mt-1 text-2xl font-bold text-neutral-900">Overview</h2>
         <p className="text-sm text-neutral-500">
           Live inventory by area, facility breakdown, activity counts across Scans 1–9, and
           First-Scan counts today / last 7 days / month to date.
         </p>
       </div>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <Card>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <Suspense fallback={<div className="h-[58px]" />}>
+            <OverviewDateFilter defaultFrom={defaultFromStr} defaultTo={defaultToStr} />
+          </Suspense>
+          <OverviewDownloadButton sections={csvSections} />
+        </div>
+        <p className="mt-2 text-xs text-neutral-500">
+          The date range controls the &quot;Category breakdown&quot; panel below; the download button exports
+          every section on this page as one CSV.
+        </p>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TtxbInventoryBox
           count={ttxbStorageParcels.length}
           gmv={gmvOf(ttxbStorageParcels)}
           dailyEntries={ttxbDailyEntries}
           backlogCount={ttxbBacklogCount}
         />
-        <div className="rounded-md border-2 border-green-300 bg-green-50 p-4">
-          <div className="text-sm font-semibold uppercase tracking-wide text-green-800">
+        <Card className="border-l-4 border-l-emerald-600">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <span className="h-2 w-2 rounded-full bg-emerald-600" />
             Inventory — Liquidation Area
           </div>
-          <div className="text-6xl font-black text-green-900">{liquidationParcels.length}</div>
-          <div className="text-xl font-semibold text-green-800">
+          <div className="mt-1 text-6xl font-bold text-neutral-900">{liquidationParcels.length}</div>
+          <div className="text-xl font-semibold text-emerald-700">
             GMV ₱{gmvOf(liquidationParcels).toLocaleString()}
           </div>
-          <div className="mt-2 flex flex-col gap-1 text-sm text-green-900">
+          <div className="mt-2 flex flex-col gap-1 text-sm text-neutral-600">
             <div>
               Not sold: {liquidationNotSoldParcels.length} · GMV ₱{gmvOf(liquidationNotSoldParcels).toLocaleString()}
             </div>
@@ -355,8 +510,8 @@ export async function OverviewPanel() {
             </div>
           </div>
 
-          <div className="mt-3 flex flex-col gap-2 rounded-md border border-green-200 bg-white p-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-green-800">
+          <div className="mt-4 flex flex-col gap-2 rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Aging — entry to sale (target 4–6 weeks)
             </h4>
             <div className="flex flex-col gap-1 text-sm text-neutral-700">
@@ -374,29 +529,89 @@ export async function OverviewPanel() {
                 className={`w-fit rounded-md px-2 py-1 font-semibold ${
                   avgTimeToSaleDays != null && avgTimeToSaleDays > 42
                     ? 'bg-red-100 text-red-800'
-                    : 'bg-green-100 text-green-800'
+                    : 'bg-emerald-100 text-emerald-800'
                 }`}
               >
                 Avg time to sale: {avgTimeToSaleDays != null ? `${avgTimeToSaleDays.toFixed(0)} days` : 'No sales yet'}
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </Card>
+      </div>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Stuck at First Scan ({stuckAtFirstScan?.length ?? 0}) — not yet fully processed
-        </h3>
-        <p className="text-xs text-neutral-500">
-          TIDs whose last scan was First Scan (Scan 1) — they haven&apos;t yet been inbounded into
-          either area.
-        </p>
-        <ul className="max-h-48 max-w-md overflow-y-auto rounded-md border border-neutral-200 text-xs">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Total inventory GMV"
+          value={`₱${totalGmv.toLocaleString()}`}
+          description={`${ttxbStorageParcels.length + liquidationParcels.length} parcels on hand`}
+          accentDot="bg-red-600"
+        />
+        <StatCard
+          label="TTXB Storage"
+          value={String(ttxbStorageParcels.length)}
+          description={`GMV ₱${gmvOf(ttxbStorageParcels).toLocaleString()}`}
+          accentDot="bg-blue-600"
+        />
+        <StatCard
+          label="Liquidation Area"
+          value={String(liquidationParcels.length)}
+          description={`GMV ₱${gmvOf(liquidationParcels).toLocaleString()} · ${liquidationSoldParcels.length} sold`}
+          accentDot="bg-emerald-600"
+        />
+      </div>
+
+      <Card>
+        <CardHeader title="Pipeline by stage" subtitle="Live parcel counts across all 9 stages" />
+        <StageFunnelStrip
+          cells={stageCounts.map((s) => ({ key: s.code, label: s.label, count: s.count, color: s.color }))}
+        />
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="By stage" subtitle="count + GMV" />
+          <div className="mt-1 flex flex-col divide-y divide-neutral-50">
+            {stageCounts.map((s) => (
+              <ProgressBarRow
+                key={s.code}
+                label={s.label}
+                count={s.count}
+                maxCount={maxStageCount}
+                detail={s.count > 0 ? `₱${s.gmv.toLocaleString()}` : '—'}
+              />
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="By category" subtitle={`First Scan · ${rangeFromStr} to ${rangeToStr}`} />
+          <div className="mt-1 flex flex-col divide-y divide-neutral-50">
+            {rangeCategoryData.byCategory.map((c) => (
+              <ProgressBarRow
+                key={c.code}
+                label={c.label}
+                count={c.count}
+                maxCount={maxRangeCategoryCount}
+                detail={`${c.count} in range`}
+                barColor="bg-neutral-800"
+              />
+            ))}
+          </div>
+          {rangeCategoryData.byCategory.every((c) => c.count === 0) && (
+            <p className="mt-2 text-sm text-neutral-400">No First Scans in the selected range.</p>
+          )}
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader
+          title={`Stuck at First Scan (${stuckAtFirstScan?.length ?? 0})`}
+          subtitle="not yet inbounded into either area"
+        />
+        <ul className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-neutral-100 text-sm">
           {(stuckAtFirstScan ?? []).map((p) => (
             <li
               key={p.tid}
-              className="flex items-center justify-between border-b border-neutral-100 px-3 py-1.5 last:border-b-0"
+              className="flex items-center justify-between border-b border-neutral-50 px-3 py-2 last:border-b-0"
             >
               <span className="font-mono">{p.tid}</span>
               <span className="text-neutral-500">
@@ -405,18 +620,16 @@ export async function OverviewPanel() {
             </li>
           ))}
           {(stuckAtFirstScan ?? []).length === 0 && (
-            <li className="px-3 py-1.5 text-neutral-400">None — everything has moved past First Scan.</li>
+            <li className="px-3 py-2 text-neutral-400">None — everything has moved past First Scan.</li>
           )}
         </ul>
-      </section>
+      </Card>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Activity today / this week (Scans 1–9)
-        </h3>
-        <table className="w-full max-w-2xl text-left text-sm">
+      <Card>
+        <CardHeader title="Activity today / this week" subtitle="Scans 1–9" />
+        <table className="mt-2 w-full max-w-2xl text-left text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
+            <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
               <th className="py-2 pr-4">Station</th>
               <th className="py-2 pr-4">Grain</th>
               <th className="py-2 pr-4">Today</th>
@@ -425,7 +638,7 @@ export async function OverviewPanel() {
           </thead>
           <tbody>
             {activityCounts.map((a) => (
-              <tr key={a.key} className="border-b border-neutral-100">
+              <tr key={a.key} className="border-b border-neutral-50">
                 <td className="py-2 pr-4">{a.label}</td>
                 <td className="py-2 pr-4 text-neutral-500">{a.grain}</td>
                 <td className="py-2 pr-4 font-medium">{a.today}</td>
@@ -434,18 +647,13 @@ export async function OverviewPanel() {
             ))}
           </tbody>
         </table>
-      </section>
+      </Card>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Productivity — scans by account
-        </h3>
-        <p className="text-xs text-neutral-500">
-          Today / week-to-date / month-to-date totals, then a breakdown by scan type per account.
-        </p>
-        <table className="w-full max-w-2xl text-left text-sm">
+      <Card>
+        <CardHeader title="Productivity" subtitle="scans by account — today / WTD / MTD" />
+        <table className="mt-2 w-full max-w-2xl text-left text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
+            <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
               <th className="py-2 pr-4">Account</th>
               <th className="py-2 pr-4">Today</th>
               <th className="py-2 pr-4">WTD</th>
@@ -454,7 +662,7 @@ export async function OverviewPanel() {
           </thead>
           <tbody>
             {productivity.map((p) => (
-              <tr key={p.email} className="border-b border-neutral-100">
+              <tr key={p.email} className="border-b border-neutral-50">
                 <td className="py-2 pr-4">{p.email}</td>
                 <td className="py-2 pr-4 font-medium">{p.todayTotal}</td>
                 <td className="py-2 pr-4 font-medium">{p.weekTotal}</td>
@@ -463,14 +671,14 @@ export async function OverviewPanel() {
             ))}
           </tbody>
         </table>
-        {productivity.length === 0 && <p className="text-sm text-neutral-400">No accounts found.</p>}
+        {productivity.length === 0 && <p className="mt-2 text-sm text-neutral-400">No accounts found.</p>}
 
         {productivity.map((p) => (
-          <div key={p.email} className="mt-2 flex flex-col gap-1">
+          <div key={p.email} className="mt-3 flex flex-col gap-1">
             <h4 className="text-xs font-semibold text-neutral-700">{p.email} — by scan type</h4>
             <table className="w-full max-w-2xl text-left text-xs">
               <thead>
-                <tr className="border-b border-neutral-200 uppercase tracking-wide text-neutral-500">
+                <tr className="border-b border-neutral-100 uppercase tracking-wide text-neutral-500">
                   <th className="py-1.5 pr-4">Scan</th>
                   <th className="py-1.5 pr-4">Today</th>
                   <th className="py-1.5 pr-4">WTD</th>
@@ -481,7 +689,7 @@ export async function OverviewPanel() {
                 {p.byActivity
                   .filter((a) => a.month > 0)
                   .map((a) => (
-                    <tr key={a.key} className="border-b border-neutral-100">
+                    <tr key={a.key} className="border-b border-neutral-50">
                       <td className="py-1.5 pr-4">{a.label}</td>
                       <td className="py-1.5 pr-4">{a.today}</td>
                       <td className="py-1.5 pr-4">{a.week}</td>
@@ -499,22 +707,20 @@ export async function OverviewPanel() {
             </table>
           </div>
         ))}
-      </section>
+      </Card>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Where everything currently is
-        </h3>
-        <table className="w-full max-w-md text-left text-sm">
+      <Card>
+        <CardHeader title="Where everything currently is" />
+        <table className="mt-2 w-full max-w-md text-left text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
+            <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
               <th className="py-2 pr-4">Facility / stage</th>
               <th className="py-2">Parcels</th>
             </tr>
           </thead>
           <tbody>
             {Array.from(facilityCounts.entries()).map(([facility, count]) => (
-              <tr key={facility} className="border-b border-neutral-100">
+              <tr key={facility} className="border-b border-neutral-50">
                 <td className="py-2 pr-4">{facility}</td>
                 <td className="py-2 font-medium">{count}</td>
               </tr>
@@ -522,39 +728,41 @@ export async function OverviewPanel() {
           </tbody>
         </table>
         {facilityCounts.size === 0 && (
-          <p className="text-sm text-neutral-400">No parcels in the system yet.</p>
+          <p className="mt-2 text-sm text-neutral-400">No parcels in the system yet.</p>
         )}
-      </section>
+      </Card>
 
-      {[
-        { label: todayLabel, data: today },
-        { label: last7Label, data: last7 },
-        { label: mtdLabel, data: mtd },
-      ].map(({ label, data }) => (
-        <section key={label} className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold text-neutral-900">{label}</h3>
-          <table className="w-full max-w-md text-left text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
-                <th className="py-2 pr-4">Category (First Scan)</th>
-                <th className="py-2">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-neutral-100">
-                <td className="py-2 pr-4 font-medium">Total</td>
-                <td className="py-2 font-medium">{data.total}</td>
-              </tr>
-              {data.byCategory.map((c) => (
-                <tr key={c.code} className="border-b border-neutral-100 text-neutral-600">
-                  <td className="py-1.5 pl-4 pr-4">{c.label}</td>
-                  <td className="py-1.5">{c.count}</td>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {[
+          { label: todayLabel, data: today },
+          { label: last7Label, data: last7 },
+          { label: mtdLabel, data: mtd },
+        ].map(({ label, data }) => (
+          <Card key={label}>
+            <CardHeader title={label} />
+            <table className="mt-2 w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="py-2 pr-4">Category (First Scan)</th>
+                  <th className="py-2">Count</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      ))}
-    </div>
+              </thead>
+              <tbody>
+                <tr className="border-b border-neutral-50">
+                  <td className="py-2 pr-4 font-medium">Total</td>
+                  <td className="py-2 font-medium">{data.total}</td>
+                </tr>
+                {data.byCategory.map((c) => (
+                  <tr key={c.code} className="border-b border-neutral-50 text-neutral-600">
+                    <td className="py-1.5 pl-4 pr-4">{c.label}</td>
+                    <td className="py-1.5">{c.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        ))}
+      </div>
+    </OverviewCanvas>
   )
 }

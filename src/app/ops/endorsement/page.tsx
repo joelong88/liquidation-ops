@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { EndorsePalletsForm } from '@/app/ops/endorsement/endorse-pallets-form'
+import { CardHeader } from '@/components/overview-ui'
 
 export default async function EndorsementPage() {
   const supabase = await createClient()
@@ -53,8 +54,8 @@ export default async function EndorsementPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-base font-semibold text-neutral-900">Endorsement</h2>
-        <p className="text-sm text-neutral-500">
+        <CardHeader title="Endorsement" />
+        <p className="mt-2 text-sm text-neutral-500">
           Weekly bulk digital hand-off of assembled pallets to the admin team. Not a scan.
         </p>
       </div>

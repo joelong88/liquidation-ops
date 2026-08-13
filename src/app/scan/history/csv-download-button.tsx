@@ -4,17 +4,18 @@ type Row = {
   level: 'TID' | 'Sack' | 'Pallet'
   idLabel: string
   scan: string
+  result: string | null
   scannedByEmail: string | null
   eventTs: string
 }
 
 function toCsv(rows: Row[]) {
-  const header = ['Level', 'ID', 'Scan', 'Scanned by', 'When (SGT)']
+  const header = ['Level', 'ID', 'Scan', 'Result', 'Scanned by', 'When (SGT)']
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
   const lines = [
     header.join(','),
     ...rows.map((r) =>
-      [r.level, r.idLabel, r.scan, r.scannedByEmail ?? '', r.eventTs].map(escape).join(',')
+      [r.level, r.idLabel, r.scan, r.result ?? '', r.scannedByEmail ?? '', r.eventTs].map(escape).join(',')
     ),
   ]
   return lines.join('\n')

@@ -93,10 +93,7 @@ export function SellPalletsForm({ pallets }: { pallets: Pallet[] }) {
   if (pallets.length === 0) return null
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4"
-    >
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <h2 className="text-base font-semibold text-neutral-900">
         Record Sale <span className="font-normal text-neutral-500">(bundle one or more endorsed pallets into a batch)</span>
       </h2>

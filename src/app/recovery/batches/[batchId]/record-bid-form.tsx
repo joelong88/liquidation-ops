@@ -38,10 +38,7 @@ export function RecordBidForm({ batchId }: { batchId: number }) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-wrap items-end gap-3 rounded-md border border-neutral-200 p-4"
-    >
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
         <label htmlFor="buyer" className="text-sm font-medium text-neutral-700">
           Winning buyer

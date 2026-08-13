@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { CsvUploadForm } from '@/app/ops/data-source/csv-upload-form'
 import { formatDateTime } from '@/lib/format-date'
+import { CardHeader } from '@/components/overview-ui'
 
 export default async function DataSourcePage() {
   const supabase = await createClient()
@@ -27,14 +28,12 @@ export default async function DataSourcePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Data Source</h2>
-      </div>
+      <CardHeader title="Data Source" />
 
       <CsvUploadForm />
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        <h3 className="text-sm font-semibold text-neutral-900">
           Pending ({count ?? 0}) — not yet First-Scanned
         </h3>
         <table className="w-full max-w-3xl text-left text-sm">
@@ -77,9 +76,7 @@ export default async function DataSourcePage() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Upload history
-        </h3>
+        <h3 className="text-sm font-semibold text-neutral-900">Upload history</h3>
         <table className="w-full max-w-3xl text-left text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">

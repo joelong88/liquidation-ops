@@ -3,6 +3,7 @@ import { serverNow } from '@/lib/now'
 import { StripAndConsolidateForm } from '@/app/ops/strip-and-consolidate-form'
 import { ForceSuccessForm } from '@/app/ops/strip-ttxb-storage/force-success-form'
 import { formatDate } from '@/lib/format-date'
+import { CardHeader } from '@/components/overview-ui'
 
 export default async function StripTtxbStoragePage() {
   const supabase = await createClient()
@@ -29,10 +30,8 @@ export default async function StripTtxbStoragePage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-base font-semibold text-neutral-900">
-          Strip &amp; Consolidate — TTXB Storage Area
-        </h2>
-        <p className="text-sm text-neutral-500">
+        <CardHeader title="Strip & Consolidate — TTXB Storage Area" />
+        <p className="mt-2 text-sm text-neutral-500">
           Sack-level scan, hold-gated. Scan a pallet ID once, then scan each closed sack — it
           gets stripped and added straight onto that pallet in one confirmation. Close the
           pallet once it&apos;s full to start a new one. The list below shows closed sacks

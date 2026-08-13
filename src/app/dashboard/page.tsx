@@ -15,17 +15,22 @@ const NAV_LINKS: { href: string; label: string; roles: Role[] }[] = [
   },
   {
     href: '/recovery/batches',
-    label: 'Sales',
+    label: 'Pallets for Sale',
     roles: ['recovery_team', 'finance_team', 'owner'],
   },
 ]
 
 const OVERVIEW_ROLES: Role[] = ['warehouse_ops', 'recovery_team', 'owner']
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>
+}) {
   const profile = await getCurrentProfile()
   const links = profile ? NAV_LINKS.filter((l) => l.roles.includes(profile.role)) : []
   const showOverview = profile && OVERVIEW_ROLES.includes(profile.role)
+  const { from, to } = await searchParams
 
   return (
     <main className="flex min-h-screen flex-col gap-6 p-8">
@@ -65,7 +70,7 @@ export default async function DashboardPage() {
 
           {showOverview && (
             <div className="lg:border-l lg:border-neutral-200 lg:pl-10">
-              <OverviewPanel />
+              <OverviewPanel from={from} to={to} />
             </div>
           )}
         </div>

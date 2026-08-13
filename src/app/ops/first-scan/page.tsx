@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { FirstScanForm } from '@/app/ops/first-scan/first-scan-form'
+import { CardHeader } from '@/components/overview-ui'
 
 export default async function FirstScanPage() {
   const supabase = await createClient()
@@ -10,9 +11,7 @@ export default async function FirstScanPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">First Scan</h2>
-      </div>
+      <CardHeader title="First Scan" />
       <FirstScanForm bins={bins ?? []} hviThreshold={Number(config?.value_numeric ?? 3000)} />
     </div>
   )

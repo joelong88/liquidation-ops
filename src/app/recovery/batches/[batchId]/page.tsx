@@ -3,6 +3,7 @@ import { requireRole, AccessRestricted } from '@/lib/supabase/role-gate'
 import { createClient } from '@/lib/supabase/server'
 import { RecordBidForm } from '@/app/recovery/batches/[batchId]/record-bid-form'
 import { BackLink } from '@/components/back-link'
+import { OverviewCanvas, Card, CardHeader, StatCard } from '@/components/overview-ui'
 
 export default async function BatchDetailPage({
   params,
@@ -65,125 +66,106 @@ export default async function BatchDetailPage({
   }))
 
   return (
-    <main className="flex min-h-screen flex-col gap-6 p-6">
-      <div>
-        <BackLink href="/recovery/batches" label="Sales" />
-        <h1 className="text-lg font-semibold text-neutral-900">
-          Batch {batch.batch_number} <span className="text-neutral-400">({batch.status})</span>
-        </h1>
-        <p className="text-sm text-neutral-500">
-          {batch.batch_type} · {totalTids} parcels
-        </p>
-      </div>
+    <main className="min-h-screen p-6">
+      <OverviewCanvas>
+        <div>
+          <BackLink href="/recovery/batches" label="Pallets for Sale" />
+          <h1 className="mt-1 text-2xl font-bold text-neutral-900">
+            Batch {batch.batch_number} <span className="text-neutral-400">({batch.status})</span>
+          </h1>
+          <p className="text-sm text-neutral-500">
+            {batch.batch_type} · {totalTids} parcels
+          </p>
+        </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-md border border-neutral-200 p-3">
-          <div className="text-xs uppercase text-neutral-500">Ceiling price (sum GMV)</div>
-          <div className="text-lg font-semibold">₱{ceilingSum.toLocaleString()}</div>
-        </div>
-        <div className="rounded-md border border-neutral-200 p-3">
-          <div className="text-xs uppercase text-neutral-500">Total TIDs</div>
-          <div className="text-lg font-semibold">{totalTids}</div>
-        </div>
-        <div className="rounded-md border border-neutral-200 p-3">
-          <div className="text-xs uppercase text-neutral-500">Avg GMV / TID</div>
-          <div className="text-lg font-semibold">
-            {avgGmv != null ? `₱${avgGmv.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
-          </div>
-        </div>
-        <div className="rounded-md border border-neutral-200 p-3">
-          <div className="text-xs uppercase text-neutral-500">Recovery rate</div>
-          <div className="text-lg font-semibold">
-            {recoveryRate != null ? `${recoveryRate.toFixed(1)}%` : '—'}
-          </div>
-        </div>
-      </div>
-
-      {sale ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-md border-2 border-neutral-300 bg-neutral-50 p-3">
-            <div className="text-xs uppercase text-neutral-500">Sold for</div>
-            <div className="text-lg font-semibold">₱{Number(sale.sale_amount).toLocaleString()}</div>
-          </div>
-          <div className="rounded-md border border-neutral-200 p-3">
-            <div className="text-xs uppercase text-neutral-500">Buyer</div>
-            <div className="text-lg font-semibold">{sale.buyer_name}</div>
-          </div>
-          <div className="rounded-md border border-neutral-200 p-3">
-            <div className="text-xs uppercase text-neutral-500">Payment</div>
-            <div className="text-lg font-semibold">
-              {sale.payment_status === 'PAID' ? 'Paid' : 'Pending'}
-            </div>
-          </div>
-          <div className="rounded-md border border-neutral-200 p-3">
-            <div className="text-xs uppercase text-neutral-500">Sale date</div>
-            <div className="text-lg font-semibold">
-              {sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : '—'}
-            </div>
-          </div>
+          <StatCard label="Ceiling price (sum GMV)" value={`₱${ceilingSum.toLocaleString()}`} accentDot="bg-red-600" />
+          <StatCard label="Total TIDs" value={String(totalTids)} />
+          <StatCard
+            label="Avg GMV / TID"
+            value={avgGmv != null ? `₱${avgGmv.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+          />
+          <StatCard
+            label="Recovery rate"
+            value={recoveryRate != null ? `${recoveryRate.toFixed(1)}%` : '—'}
+            accentDot="bg-emerald-600"
+          />
         </div>
-      ) : (
-        profile.role !== 'finance_team' && <RecordBidForm batchId={batch.batch_id} />
-      )}
 
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Pallets in this batch</h2>
-        <p className="text-sm text-neutral-500">
-          A batch bundles pallets (not individual TIDs) into one sale — see a pallet&apos;s own
-          TID list on the Sales page&apos;s Pallets table.
-        </p>
-      </div>
-      <table className="w-full max-w-2xl text-left text-sm">
-        <thead>
-          <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
-            <th className="py-2 pr-4">Pallet</th>
-            <th className="py-2 pr-4">Status</th>
-            <th className="py-2 pr-4">TIDs</th>
-            <th className="py-2">GMV</th>
-          </tr>
-        </thead>
-        <tbody>
-          {palletRows.map((p) => (
-            <tr key={p.pallet_id} className="border-b border-neutral-100">
-              <td className="py-2 pr-4 font-mono">{p.pallet_code}</td>
-              <td className="py-2 pr-4">{p.status}</td>
-              <td className="py-2 pr-4">{p.tidCount}</td>
-              <td className="py-2">₱{p.gmv.toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {palletRows.length === 0 && (
-        <p className="text-sm text-neutral-400">No pallets associated with this batch.</p>
-      )}
+        {sale ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard label="Sold for" value={`₱${Number(sale.sale_amount).toLocaleString()}`} accentDot="bg-red-600" />
+            <StatCard label="Buyer" value={sale.buyer_name ?? '—'} />
+            <StatCard label="Payment" value={sale.payment_status === 'PAID' ? 'Paid' : 'Pending'} />
+            <StatCard
+              label="Sale date"
+              value={sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : '—'}
+            />
+          </div>
+        ) : (
+          profile.role !== 'finance_team' && (
+            <Card>
+              <RecordBidForm batchId={batch.batch_id} />
+            </Card>
+          )
+        )}
 
-      {noAwbParcels && noAwbParcels.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Direct NO-AWB TIDs (no pallet)
-          </h3>
-          <table className="w-full max-w-2xl text-left text-sm">
+        <Card>
+          <CardHeader
+            title="Pallets in this batch"
+            subtitle="TID list per pallet is on the Pallets for Sale page's Pallets table"
+          />
+          <table className="mt-2 w-full max-w-2xl text-left text-sm">
             <thead>
-              <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
-                <th className="py-2 pr-4">TID</th>
-                <th className="py-2 pr-4">Type</th>
+              <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
+                <th className="py-2 pr-4">Pallet</th>
+                <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">TIDs</th>
                 <th className="py-2">GMV</th>
               </tr>
             </thead>
             <tbody>
-              {noAwbParcels.map((p) => (
-                <tr key={p.tid} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 font-mono">{p.tid}</td>
-                  <td className="py-2 pr-4">{p.item_type ?? '—'}</td>
-                  <td className="py-2">
-                    {p.effective_value != null ? `₱${Number(p.effective_value).toLocaleString()}` : '—'}
-                  </td>
+              {palletRows.map((p) => (
+                <tr key={p.pallet_id} className="border-b border-neutral-50">
+                  <td className="py-2 pr-4 font-mono">{p.pallet_code}</td>
+                  <td className="py-2 pr-4">{p.status}</td>
+                  <td className="py-2 pr-4">{p.tidCount}</td>
+                  <td className="py-2">₱{p.gmv.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+          {palletRows.length === 0 && (
+            <p className="mt-2 text-sm text-neutral-400">No pallets associated with this batch.</p>
+          )}
+        </Card>
+
+        {noAwbParcels && noAwbParcels.length > 0 && (
+          <Card>
+            <CardHeader title="Direct NO-AWB TIDs" subtitle="no pallet" />
+            <table className="mt-2 w-full max-w-2xl text-left text-sm">
+              <thead>
+                <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="py-2 pr-4">TID</th>
+                  <th className="py-2 pr-4">Type</th>
+                  <th className="py-2">GMV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {noAwbParcels.map((p) => (
+                  <tr key={p.tid} className="border-b border-neutral-50">
+                    <td className="py-2 pr-4 font-mono">{p.tid}</td>
+                    <td className="py-2 pr-4">{p.item_type ?? '—'}</td>
+                    <td className="py-2">
+                      {p.effective_value != null ? `₱${Number(p.effective_value).toLocaleString()}` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </OverviewCanvas>
     </main>
   )
 }

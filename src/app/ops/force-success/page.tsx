@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { CsvDownloadButton } from '@/app/ops/force-success/csv-download-button'
 import { formatDate } from '@/lib/format-date'
+import { CardHeader } from '@/components/overview-ui'
 
 export default async function ForceSuccessPage() {
   const supabase = await createClient()
@@ -16,8 +17,8 @@ export default async function ForceSuccessPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-base font-semibold text-neutral-900">Force-Success List</h2>
-        <p className="text-sm text-neutral-500">
+        <CardHeader title="Force-Success List" />
+        <p className="mt-2 text-sm text-neutral-500">
           TIDs flagged as needing a manual force-success — actioned by you outside the app, not
           here. This list is read-only; there&apos;s no action button on purpose. Which parcel
           statuses trigger this flag is still being defined — the list will stay empty until

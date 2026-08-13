@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { requireRole, AccessRestricted } from '@/lib/supabase/role-gate'
 import { createClient } from '@/lib/supabase/server'
 import { SellPalletsForm } from '@/app/recovery/batches/sell-pallets-form'
+import { PalletManifestRow } from '@/app/recovery/batches/pallet-manifest-row'
 import { BackToDashboard } from '@/components/back-to-dashboard'
+import { OverviewCanvas, Card, CardHeader } from '@/components/overview-ui'
 
 export default async function BatchesPage() {
   const profile = await requireRole(['recovery_team', 'finance_team', 'owner'])
@@ -25,17 +27,28 @@ export default async function BatchesPage() {
         .from('pallet')
         .select('pallet_id, pallet_code, status, batch_id, assembled_at, endorsed_at, outgoing_at')
         .order('assembled_at', { ascending: false }),
-      supabase.from('parcel').select('pallet_id, effective_value').not('pallet_id', 'is', null),
+      supabase
+        .from('parcel')
+        .select('pallet_id, tid, effective_value, manual_value_item_description')
+        .not('pallet_id', 'is', null),
       supabase.from('parcel').select('batch_id, effective_value').not('batch_id', 'is', null),
       supabase.from('sale').select('batch_id, sale_amount, payment_status').not('batch_id', 'is', null),
     ])
 
   const tidCountByPallet = new Map<number, number>()
   const gmvByPallet = new Map<number, number>()
+  const manifestByPallet = new Map<number, { tid: string; description: string | null; gmv: number }[]>()
   for (const p of palletParcels ?? []) {
     if (p.pallet_id == null) continue
     tidCountByPallet.set(p.pallet_id, (tidCountByPallet.get(p.pallet_id) ?? 0) + 1)
     gmvByPallet.set(p.pallet_id, (gmvByPallet.get(p.pallet_id) ?? 0) + (Number(p.effective_value) || 0))
+    const items = manifestByPallet.get(p.pallet_id) ?? []
+    items.push({
+      tid: p.tid,
+      description: p.manual_value_item_description,
+      gmv: Number(p.effective_value) || 0,
+    })
+    manifestByPallet.set(p.pallet_id, items)
   }
 
   const gmvByBatch = new Map<number, number>()
@@ -95,102 +108,129 @@ export default async function BatchesPage() {
     })
 
   return (
-    <main className="flex min-h-screen flex-col gap-4 p-6">
-      <BackToDashboard />
-      <h1 className="text-lg font-semibold text-neutral-900">Sales</h1>
-      {profile.role !== 'finance_team' && <SellPalletsForm pallets={endorsedPallets ?? []} />}
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
-            <th className="py-2 pr-4">Batch</th>
-            <th className="py-2 pr-4">Pallets</th>
-            <th className="py-2 pr-4">Type</th>
-            <th className="py-2 pr-4">Status</th>
-            <th className="py-2 pr-4">Parcels</th>
-            <th className="py-2 pr-4">Ceiling</th>
-            <th className="py-2">Floor</th>
-          </tr>
-        </thead>
-        <tbody>
-          {batches?.map((b) => (
-            <tr key={b.batch_id} className="border-b border-neutral-100">
-              <td className="py-2 pr-4">
-                <Link
-                  href={`/recovery/batches/${b.batch_id}`}
-                  className="font-medium text-neutral-900 underline"
-                >
-                  Batch {b.batch_number}
-                </Link>
-              </td>
-              <td className="py-2 pr-4 font-mono text-xs">
-                {(palletCodesByBatch.get(b.batch_id) ?? []).join(', ') || '—'}
-              </td>
-              <td className="py-2 pr-4">{b.batch_type}</td>
-              <td className="py-2 pr-4">{b.status}</td>
-              <td className="py-2 pr-4">{b.parcel?.[0]?.count ?? 0}</td>
-              <td className="py-2 pr-4">
-                {b.ceiling_price != null ? `₱${Number(b.ceiling_price).toLocaleString()}` : '—'}
-              </td>
-              <td className="py-2">
-                {b.floor_price != null ? `₱${Number(b.floor_price).toLocaleString()}` : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {batches?.length === 0 && <p className="text-sm text-neutral-400">No batches yet.</p>}
+    <main className="min-h-screen p-6">
+      <OverviewCanvas>
+        <div>
+          <BackToDashboard />
+          <h1 className="mt-1 text-2xl font-bold text-neutral-900">Pallets for Sale</h1>
+        </div>
 
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Pallets</h2>
-        <p className="text-sm text-neutral-500">
-          Every pallet assembled from stripped sacks — TID count and GMV are this pallet&apos;s
-          own; recovery % is the pallet&apos;s batch-wide rate (a batch can bundle several
-          pallets into one sale, so recovery is only meaningful at that level).
-        </p>
-      </div>
-      <table className="w-full max-w-4xl text-left text-sm">
-        <thead>
-          <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
-            <th className="py-2 pr-4">Pallet</th>
-            <th className="py-2 pr-4">Batch</th>
-            <th className="py-2 pr-4">Status</th>
-            <th className="py-2 pr-4">TIDs</th>
-            <th className="py-2 pr-4">GMV</th>
-            <th className="py-2 pr-4">Endorsed</th>
-            <th className="py-2 pr-4">Sold for</th>
-            <th className="py-2 pr-4">Recovery %</th>
-            <th className="py-2">Outbound</th>
-          </tr>
-        </thead>
-        <tbody>
-          {palletRows.map((p) => (
-            <tr key={p.pallet_id} className="border-b border-neutral-100">
-              <td className="py-2 pr-4 font-mono">{p.pallet_code}</td>
-              <td className="py-2 pr-4">
-                {p.batch_id != null ? (
-                  <Link href={`/recovery/batches/${p.batch_id}`} className="font-medium text-neutral-900 underline">
-                    Batch {p.batch_number}
-                  </Link>
-                ) : (
-                  <span className="text-neutral-400">—</span>
-                )}
-              </td>
-              <td className="py-2 pr-4">{p.status}</td>
-              <td className="py-2 pr-4">{p.tidCount}</td>
-              <td className="py-2 pr-4">₱{p.gmv.toLocaleString()}</td>
-              <td className="py-2 pr-4">{p.endorsed ? 'Yes' : 'No'}</td>
-              <td className="py-2 pr-4">
-                {p.sale ? `₱${p.sale.sale_amount.toLocaleString()}` : '—'}
-              </td>
-              <td className="py-2 pr-4">
-                {p.recoveryRate != null ? `${p.recoveryRate.toFixed(1)}%` : '—'}
-              </td>
-              <td className="py-2">{p.outbound ? 'Yes' : 'No'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {palletRows.length === 0 && <p className="text-sm text-neutral-400">No pallets yet.</p>}
+        {profile.role !== 'finance_team' && (endorsedPallets?.length ?? 0) > 0 && (
+          <Card>
+            <SellPalletsForm pallets={endorsedPallets ?? []} />
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader title="Batches" subtitle={`${batches?.length ?? 0} total`} />
+          <table className="mt-2 w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
+                <th className="py-2 pr-4">Batch</th>
+                <th className="py-2 pr-4">Pallets</th>
+                <th className="py-2 pr-4">Type</th>
+                <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">Parcels</th>
+                <th className="py-2 pr-4">Ceiling</th>
+                <th className="py-2">Floor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {batches?.map((b) => (
+                <tr key={b.batch_id} className="border-b border-neutral-50">
+                  <td className="py-2 pr-4">
+                    <Link
+                      href={`/recovery/batches/${b.batch_id}`}
+                      className="font-medium text-neutral-900 underline"
+                    >
+                      Batch {b.batch_number}
+                    </Link>
+                  </td>
+                  <td className="py-2 pr-4 font-mono text-xs">
+                    {(palletCodesByBatch.get(b.batch_id) ?? []).join(', ') || '—'}
+                  </td>
+                  <td className="py-2 pr-4">{b.batch_type}</td>
+                  <td className="py-2 pr-4">{b.status}</td>
+                  <td className="py-2 pr-4">{b.parcel?.[0]?.count ?? 0}</td>
+                  <td className="py-2 pr-4">
+                    {b.ceiling_price != null ? `₱${Number(b.ceiling_price).toLocaleString()}` : '—'}
+                  </td>
+                  <td className="py-2">
+                    {b.floor_price != null ? `₱${Number(b.floor_price).toLocaleString()}` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {batches?.length === 0 && <p className="mt-2 text-sm text-neutral-400">No batches yet.</p>}
+        </Card>
+
+        <Card>
+          <CardHeader title="Pallets" subtitle="TID count/GMV are per pallet; recovery % is the batch-wide rate" />
+          <table className="mt-2 w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-neutral-100 text-xs uppercase tracking-wide text-neutral-500">
+                <th className="py-2 pr-4">Pallet</th>
+                <th className="py-2 pr-4">Batch</th>
+                <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">TIDs</th>
+                <th className="py-2 pr-4">GMV</th>
+                <th className="py-2 pr-4">Endorsed</th>
+                <th className="py-2 pr-4">Sold for</th>
+                <th className="py-2 pr-4">Recovery %</th>
+                <th className="py-2">Outbound</th>
+              </tr>
+            </thead>
+            <tbody>
+              {palletRows.map((p) => (
+                <tr key={p.pallet_id} className="border-b border-neutral-50">
+                  <td className="py-2 pr-4 font-mono">{p.pallet_code}</td>
+                  <td className="py-2 pr-4">
+                    {p.batch_id != null ? (
+                      <Link href={`/recovery/batches/${p.batch_id}`} className="font-medium text-neutral-900 underline">
+                        Batch {p.batch_number}
+                      </Link>
+                    ) : (
+                      <span className="text-neutral-400">—</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">{p.status}</td>
+                  <td className="py-2 pr-4">{p.tidCount}</td>
+                  <td className="py-2 pr-4">₱{p.gmv.toLocaleString()}</td>
+                  <td className="py-2 pr-4">{p.endorsed ? 'Yes' : 'No'}</td>
+                  <td className="py-2 pr-4">
+                    {p.sale ? `₱${p.sale.sale_amount.toLocaleString()}` : '—'}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {p.recoveryRate != null ? `${p.recoveryRate.toFixed(1)}%` : '—'}
+                  </td>
+                  <td className="py-2">{p.outbound ? 'Yes' : 'No'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {palletRows.length === 0 && <p className="mt-2 text-sm text-neutral-400">No pallets yet.</p>}
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Pallet History"
+            subtitle="per-pallet manifest — view or download to attach when sharing with bidders"
+          />
+          <div className="mt-3 flex flex-col gap-2">
+            {palletRows.map((p) => (
+              <PalletManifestRow
+                key={p.pallet_id}
+                palletCode={p.pallet_code}
+                status={p.status}
+                gmv={p.gmv}
+                items={manifestByPallet.get(p.pallet_id) ?? []}
+              />
+            ))}
+            {palletRows.length === 0 && <p className="text-sm text-neutral-400">No pallets yet.</p>}
+          </div>
+        </Card>
+      </OverviewCanvas>
     </main>
   )
 }

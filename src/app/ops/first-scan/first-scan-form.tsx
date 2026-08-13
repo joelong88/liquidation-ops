@@ -19,14 +19,26 @@ type BinResult = {
   duplicate?: boolean
 }
 
+// A/B and C/D are the two most-common pairs — kept hue-distinct from each other
+// (blue vs cyan, emerald vs lime), not just tint variants of the same color, so
+// they're distinguishable at a glance during rapid scanning.
 const BIN_COLORS: Record<string, string> = {
-  A: 'border-blue-400 bg-blue-50 text-blue-900',
-  B: 'border-indigo-400 bg-indigo-50 text-indigo-900',
-  C: 'border-teal-400 bg-teal-50 text-teal-900',
-  D: 'border-green-400 bg-green-50 text-green-900',
+  A: 'border-blue-600 bg-blue-50 text-blue-900',
+  B: 'border-cyan-500 bg-cyan-50 text-cyan-900',
+  C: 'border-emerald-600 bg-emerald-50 text-emerald-900',
+  D: 'border-lime-500 bg-lime-50 text-lime-900',
   E: 'border-amber-400 bg-amber-50 text-amber-900',
   F: 'border-red-400 bg-red-50 text-red-900',
   G: 'border-purple-400 bg-purple-50 text-purple-900',
+}
+
+const HVI_BINS = new Set(['A', 'C'])
+const ATTENTION_BINS = new Set(['E', 'F', 'G'])
+
+function soundKindForBin(bin?: string | null): 'success' | 'hvi' | 'attention' {
+  if (bin && HVI_BINS.has(bin)) return 'hvi'
+  if (bin && ATTENTION_BINS.has(bin)) return 'attention'
+  return 'success'
 }
 
 export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshold: number }) {
@@ -51,7 +63,7 @@ export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshol
     } else {
       const r = data as BinResult
       setResult(r)
-      playScanSound(r.ok ? 'success' : 'error')
+      playScanSound(r.ok ? soundKindForBin(r.bin) : 'error')
     }
     setScannedTid(value)
     setTid('')
