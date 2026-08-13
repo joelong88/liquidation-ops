@@ -1,0 +1,55 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Liquidation Ops",
+    "version": "0.1.0",
+    "description": "Warehouse operations app for a 3PL parcel-liquidation process (NinjaVan Philippines). This deploy is Phase A of a migration onto Substrait — only the platform-contract routes exist so far; the app's real functionality still runs against Supabase and is not yet exposed as a documented API."
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Container readiness probe. Always returns 200 with no dependency on the database being reachable.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string", "example": "ok" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/whoami": {
+      "get": {
+        "summary": "Echoes the identity headers Substrait's Google-SSO reverse proxy injects, for verifying the SSO integration before the app's real auth model depends on it.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Value of the X-Forwarded-Email header, or null if absent (e.g. SSO not enabled, or local dev)."
+                    },
+                    "user": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Value of the X-Forwarded-User header, or null if absent."
+                    }
+                  },
+                  "required": ["email", "user"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

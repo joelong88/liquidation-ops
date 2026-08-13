@@ -47,3 +47,6 @@ next-env.d.ts
 
 # personal/local Claude Code overrides — not shared with the team
 .claude/settings.local.json
+
+# Substrait CLI link state
+.substrait/
