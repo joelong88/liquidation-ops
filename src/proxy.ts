@@ -18,6 +18,17 @@ import { NextResponse, type NextRequest } from 'next/server'
 const PUBLIC_PATHS = ['/login', '/health', '/api/whoami']
 
 export async function proxy(request: NextRequest) {
+  // Must be checked before any Supabase client is built: /health is Substrait's
+  // container readiness probe and must return 200 unconditionally, even if
+  // NEXT_PUBLIC_SUPABASE_URL/ANON_KEY aren't set in this environment (e.g. a fresh
+  // Substrait deploy that hasn't had its Supabase env vars configured yet) — a
+  // failed/hanging Supabase call here would otherwise take the whole rollout down
+  // regardless of PUBLIC_PATHS below.
+  const isPublicPath = PUBLIC_PATHS.some((path) => request.nextUrl.pathname.startsWith(path))
+  if (isPublicPath) {
+    return NextResponse.next({ request })
+  }
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -43,9 +54,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isPublicPath = PUBLIC_PATHS.some((path) => request.nextUrl.pathname.startsWith(path))
-
-  if (!user && !isPublicPath) {
+  if (!user) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', request.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)
