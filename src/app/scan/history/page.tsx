@@ -1,4 +1,4 @@
-import { getCurrentProfile } from '@/lib/supabase/profile'
+import { getCurrentProfile } from '@/lib/auth/profile'
 import { createClient } from '@/lib/supabase/server'
 import { BackToDashboard } from '@/components/back-to-dashboard'
 import { formatDateTime } from '@/lib/format-date'

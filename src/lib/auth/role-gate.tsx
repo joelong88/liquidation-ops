@@ -1,8 +1,8 @@
-import { getCurrentProfile, type Profile, type Role } from '@/lib/supabase/profile'
+import { getCurrentProfile, type Profile, type Role } from '@/lib/auth/profile'
 
-// Server-only. Defense in depth alongside RLS — per Next.js's own guidance, a route's
-// proxy matcher can be bypassed by a Server Function call on the same path, so every
-// page/action that needs a specific role checks it here too, not just in proxy.ts.
+// Server-only. Defense in depth alongside proxy.ts — per Next.js's own guidance, a
+// route's proxy matcher can be bypassed by a Server Function call on the same path,
+// so every page/action that needs a specific role checks it here too, not just there.
 export async function requireRole(roles: Role[]): Promise<Profile | null> {
   const profile = await getCurrentProfile()
   if (!profile || !roles.includes(profile.role)) return null

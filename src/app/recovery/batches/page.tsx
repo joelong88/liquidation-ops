@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requireRole, AccessRestricted } from '@/lib/supabase/role-gate'
+import { requireRole, AccessRestricted } from '@/lib/auth/role-gate'
 import { createClient } from '@/lib/supabase/server'
 import { SellPalletsForm } from '@/app/recovery/batches/sell-pallets-form'
 import { PalletManifestRow } from '@/app/recovery/batches/pallet-manifest-row'

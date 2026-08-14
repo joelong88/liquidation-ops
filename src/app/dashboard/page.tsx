@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { getCurrentProfile, type Role } from '@/lib/supabase/profile'
-import { logout } from '@/app/actions/auth'
+import { getCurrentProfile, type Role } from '@/lib/auth/profile'
 import { OverviewPanel } from '@/components/overview-panel'
 
 // Placeholder landing page for now. Once M6-M7 land, this should route each role
@@ -18,6 +17,7 @@ const NAV_LINKS: { href: string; label: string; roles: Role[] }[] = [
     label: 'Pallets for Sale',
     roles: ['recovery_team', 'finance_team', 'owner'],
   },
+  { href: '/admin/users', label: 'Users & roles', roles: ['owner'] },
 ]
 
 const OVERVIEW_ROLES: Role[] = ['warehouse_ops', 'recovery_team', 'owner']
@@ -36,11 +36,11 @@ export default async function DashboardPage({
     <main className="flex min-h-screen flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-neutral-900">Liquidation Ops</h1>
-        <form action={logout}>
-          <button type="submit" className="text-sm text-neutral-500 hover:text-neutral-900">
-            Sign out
-          </button>
-        </form>
+        {/* Signing in/out is entirely handled by Substrait's SSO gateway now — there's
+            no app-managed session to clear, just its own sign-out endpoint. */}
+        <a href="/oauth2/sign_out" className="text-sm text-neutral-500 hover:text-neutral-900">
+          Sign out
+        </a>
       </div>
 
       {!profile ? (
@@ -52,7 +52,7 @@ export default async function DashboardPage({
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-[280px_1fr]">
           <div className="flex flex-col gap-6">
             <p className="text-sm text-neutral-600">
-              Signed in as <span className="font-medium">{profile.full_name ?? profile.id}</span> (
+              Signed in as <span className="font-medium">{profile.full_name ?? profile.email}</span> (
               {profile.role})
             </p>
             <nav className="flex flex-col gap-3">

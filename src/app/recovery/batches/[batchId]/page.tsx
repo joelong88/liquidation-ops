@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { requireRole, AccessRestricted } from '@/lib/supabase/role-gate'
+import { requireRole, AccessRestricted } from '@/lib/auth/role-gate'
 import { createClient } from '@/lib/supabase/server'
 import { RecordBidForm } from '@/app/recovery/batches/[batchId]/record-bid-form'
 import { BackLink } from '@/components/back-link'

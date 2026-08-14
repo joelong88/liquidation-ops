@@ -1,4 +1,4 @@
-import { requireRole, AccessRestricted } from '@/lib/supabase/role-gate'
+import { requireRole, AccessRestricted } from '@/lib/auth/role-gate'
 import { TabNav } from '@/app/ops/tab-nav'
 import { BackToDashboard } from '@/components/back-to-dashboard'
 import { OverviewCanvas, Card } from '@/components/overview-ui'
@@ -15,7 +15,7 @@ export default async function OpsLayout({ children }: { children: React.ReactNod
           <span className="text-xs font-bold uppercase tracking-wide text-red-600">Warehouse floor</span>
           <h1 className="mt-1 text-2xl font-bold text-neutral-900">Operations</h1>
           <p className="text-sm text-neutral-500">
-            Signed in as {profile.full_name ?? profile.id} ({profile.role})
+            Signed in as {profile.full_name ?? profile.email} ({profile.role})
           </p>
         </div>
         <Card>
