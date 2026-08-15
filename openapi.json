@@ -2,8 +2,42 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Liquidation Ops",
-    "version": "0.1.0",
-    "description": "Warehouse operations app for a 3PL parcel-liquidation process (NinjaVan Philippines). This deploy is Phase A of a migration onto Substrait — only the platform-contract routes exist so far; the app's real functionality still runs against Supabase and is not yet exposed as a documented API."
+    "version": "0.2.0",
+    "description": "Warehouse operations app for a 3PL parcel-liquidation process (NinjaVan Philippines). Tracks parcels from receiving-dock intake through sack/pallet consolidation, endorsement, and sale, entirely on OceanBase (MySQL-wire) with authorization backed by Substrait's Google-SSO-forwarded identity."
+  },
+  "components": {
+    "schemas": {
+      "OkError": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "error": { "type": "string", "nullable": true }
+        },
+        "required": ["ok"]
+      },
+      "SkipEntry": {
+        "type": "object",
+        "properties": {
+          "reason": { "type": "string" },
+          "sack_code": { "type": "string", "nullable": true },
+          "tid": { "type": "string", "nullable": true }
+        }
+      },
+      "AuthError": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "forbidden" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "No SSO session (missing X-Forwarded-Email) or the caller's role isn't allowed to call this route.",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/AuthError" } }
+        }
+      }
+    }
   },
   "paths": {
     "/health": {
@@ -12,18 +46,14 @@
         "responses": {
           "200": {
             "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": { "type": "string", "example": "ok" }
-              }
-            }
+            "content": { "text/plain": { "schema": { "type": "string", "example": "ok" } } }
           }
         }
       }
     },
     "/api/whoami": {
       "get": {
-        "summary": "Echoes the identity headers Substrait's Google-SSO reverse proxy injects, for verifying the SSO integration before the app's real auth model depends on it.",
+        "summary": "Echoes the identity headers Substrait's Google-SSO reverse proxy injects.",
         "responses": {
           "200": {
             "description": "OK",
@@ -32,22 +62,645 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "email": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "Value of the X-Forwarded-Email header, or null if absent (e.g. SSO not enabled, or local dev)."
-                    },
-                    "user": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "Value of the X-Forwarded-User header, or null if absent."
-                    }
+                    "email": { "type": "string", "nullable": true },
+                    "user": { "type": "string", "nullable": true }
                   },
                   "required": ["email", "user"]
                 }
               }
             }
           }
+        }
+      }
+    },
+    "/api/ops/first-scan": {
+      "post": {
+        "summary": "Tab 1 — receiving-dock triage scan. Creates/finds the parcel, resolves its output bin (A-G), and returns which physical bin to carry it to.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tid": { "type": "string" },
+                  "parcel_category": { "type": "string", "nullable": true },
+                  "station": { "type": "string", "nullable": true }
+                },
+                "required": ["tid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scan result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": { "type": "string", "nullable": true },
+                    "bin": { "type": "string", "nullable": true },
+                    "bin_label": { "type": "string", "nullable": true },
+                    "area": { "type": "string", "nullable": true },
+                    "is_hvi": { "type": "boolean", "nullable": true },
+                    "matched_rule": { "type": "integer", "nullable": true },
+                    "event_ts": { "type": "string", "format": "date-time", "nullable": true },
+                    "duplicate": { "type": "boolean", "nullable": true }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/area-inbound-scan": {
+      "post": {
+        "summary": "Tab 2/5(a) — per-TID + sack scan associating an already-First-Scanned TID with a sack in the given area, opening the sack and computing its hold on first member.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tid": { "type": "string" },
+                  "sack_code": { "type": "string" },
+                  "area": { "type": "string", "enum": ["STORAGE", "LIQUIDATION"] },
+                  "station": { "type": "string", "nullable": true }
+                },
+                "required": ["tid", "sack_code", "area"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scan result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": ["not_first_scanned", "already_in_sack", "area_mismatch", null]
+                    },
+                    "sack_area": { "type": "string", "nullable": true },
+                    "sack_code": { "type": "string", "nullable": true }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/close-sack": {
+      "post": {
+        "summary": "Closes an OPEN sack at its inbound station so it can proceed to stripping.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sack_code": { "type": "string" },
+                  "station": { "type": "string", "nullable": true }
+                },
+                "required": ["sack_code"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Close result",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkError" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/repack-scan": {
+      "post": {
+        "summary": "Tab 3 — exception-only per-TID scan pulling one TID out of an open Storage sack mid-hold, without affecting the rest of the sack.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tid": { "type": "string" },
+                  "station": { "type": "string", "nullable": true }
+                },
+                "required": ["tid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Repack result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": ["not_found", "not_in_open_sack", "sack_not_open_storage", null]
+                    },
+                    "sack_id": { "type": "integer", "nullable": true }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/force-sack-hold-success": {
+      "post": {
+        "summary": "Audited override that bypasses a sack's 7-day TTXB storage hold so it can be stripped early. Requires a reason.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sack_code": { "type": "string" },
+                  "reason": { "type": "string" }
+                },
+                "required": ["sack_code", "reason"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Override result",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkError" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/strip-sack": {
+      "post": {
+        "summary": "Tab 4/6 — sack-level scan that strips a closed sack (hold-gated for STORAGE, ungated for LIQUIDATION), advancing its member parcels.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sack_code": { "type": "string" },
+                  "area": { "type": "string", "enum": ["STORAGE", "LIQUIDATION"] },
+                  "station": { "type": "string", "nullable": true }
+                },
+                "required": ["sack_code", "area"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Strip result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": ["hold_not_matured", "not_found", "not_closed", "already_stripped", null]
+                    },
+                    "hold_until": { "type": "string", "format": "date-time", "nullable": true }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/assign-pallet": {
+      "post": {
+        "summary": "Consolidates stripped sacks and/or direct NO-AWB TIDs onto a pallet, creating the pallet if new. Per-item skip-with-reason, not all-or-nothing.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pallet_code": { "type": "string" },
+                  "sack_codes": { "type": "array", "items": { "type": "string" } },
+                  "tids": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["pallet_code"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assignment result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": { "type": "string", "nullable": true },
+                    "added_sacks": { "type": "array", "items": { "type": "string" } },
+                    "skipped": { "type": "array", "items": { "$ref": "#/components/schemas/SkipEntry" } }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/close-pallet": {
+      "post": {
+        "summary": "Closes an ASSEMBLING pallet so it's ready for weekly endorsement.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pallet_code": { "type": "string" },
+                  "station": { "type": "string", "nullable": true }
+                },
+                "required": ["pallet_code"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Close result",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkError" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/endorse-pallets": {
+      "post": {
+        "summary": "Tab 7 — weekly bulk digital hand-off of assembled pallets to the admin team. Not a scan.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pallet_ids": { "type": "array", "items": { "type": "integer" } }
+                },
+                "required": ["pallet_ids"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Endorsement result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "endorsed": { "type": "array", "items": { "type": "integer" } },
+                    "skipped": { "type": "array", "items": { "$ref": "#/components/schemas/SkipEntry" } }
+                  },
+                  "required": ["ok", "endorsed", "skipped"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/pallet-outbound": {
+      "post": {
+        "summary": "Tab 8 — physical exit scan for a pallet, requires the pallet to already be SOLD.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pallet_code": { "type": "string" },
+                  "station": { "type": "string", "nullable": true }
+                },
+                "required": ["pallet_code"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Outbound result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": ["not_found", "not_sold", "already_outgoing", null]
+                    },
+                    "status": { "type": "string", "nullable": true }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/pallet-sale": {
+      "post": {
+        "summary": "Records the sale of one or more endorsed pallets, bundling them into a batch (new or existing) with a recovery-% calculation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pallet_ids": { "type": "array", "items": { "type": "integer" } },
+                  "buyer_name": { "type": "string" },
+                  "sale_amount": { "type": "number" },
+                  "batch_id": { "type": "integer", "nullable": true },
+                  "sale_date": { "type": "string", "format": "date", "nullable": true }
+                },
+                "required": ["pallet_ids", "buyer_name", "sale_amount"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sale result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": { "type": "string", "nullable": true },
+                    "batch_id": { "type": "integer", "nullable": true },
+                    "sold_pallets": { "type": "array", "items": { "type": "integer" } },
+                    "skipped": { "type": "array", "items": { "$ref": "#/components/schemas/SkipEntry" } }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/batch-sale": {
+      "post": {
+        "summary": "Records a winning bid/sale amount directly against an existing batch (used for batches formed outside the pallet-sale flow).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "batch_id": { "type": "integer" },
+                  "buyer_name": { "type": "string" },
+                  "sale_amount": { "type": "number" },
+                  "sale_date": { "type": "string", "format": "date", "nullable": true }
+                },
+                "required": ["batch_id", "buyer_name", "sale_amount"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sale result",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkError" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/import-csv": {
+      "post": {
+        "summary": "Bulk-imports a parsed CSV of parcel_import rows (tid, status, values, ticket metadata) into the pending-import staging table.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rows": {
+                    "type": "array",
+                    "items": { "type": "object", "additionalProperties": { "type": "string" } }
+                  }
+                },
+                "required": ["rows"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": { "type": "string", "nullable": true },
+                    "imported": { "type": "integer", "nullable": true },
+                    "skipped": { "type": "array", "items": { "$ref": "#/components/schemas/SkipEntry" } }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/sack-status": {
+      "get": {
+        "summary": "Live per-sack parcel count for the sack currently open at an inbound station, by sack code.",
+        "parameters": [
+          { "name": "code", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sack status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sack_id": { "type": "integer", "nullable": true },
+                    "tid_count": { "type": "integer", "nullable": true }
+                  },
+                  "required": ["sack_id", "tid_count"]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/closed-today": {
+      "get": {
+        "summary": "Sacks closed today in a given area, each with a live TID count.",
+        "parameters": [
+          { "name": "area", "in": "query", "required": true, "schema": { "type": "string", "enum": ["STORAGE", "LIQUIDATION"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Closed-today list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sacks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sack_id": { "type": "integer" },
+                          "sack_code": { "type": "string" },
+                          "closed_at": { "type": "string", "format": "date-time" },
+                          "tid_count": { "type": "integer" }
+                        }
+                      }
+                    }
+                  },
+                  "required": ["sacks"]
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing/invalid area" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/sack-preview": {
+      "get": {
+        "summary": "Strip & Consolidate's lookup-before-confirm step: sack status and its member TIDs, by sack code + area.",
+        "parameters": [
+          { "name": "code", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "area", "in": "query", "required": true, "schema": { "type": "string", "enum": ["STORAGE", "LIQUIDATION"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sack preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": ["not_found", "still_open", "wrong_status", null]
+                    },
+                    "status": { "type": "string", "nullable": true },
+                    "sack_code": { "type": "string", "nullable": true },
+                    "tids": { "type": "array", "items": { "type": "string" } },
+                    "already_stripped": { "type": "boolean", "nullable": true }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing/invalid code or area" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ops/locate-tid": {
+      "get": {
+        "summary": "Finds a parcel by TID and reports its current stage, output bin, and sack/pallet location — used for shipper pull-out requests.",
+        "parameters": [
+          { "name": "tid", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Location result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "error": { "type": "string", "nullable": true, "enum": ["not_found", null] },
+                    "tid": { "type": "string", "nullable": true },
+                    "current_stage": { "type": "string", "nullable": true },
+                    "resolved_output_bin": { "type": "string", "nullable": true },
+                    "sack_code": { "type": "string", "nullable": true },
+                    "sack_area": { "type": "string", "nullable": true },
+                    "sack_status": { "type": "string", "nullable": true },
+                    "pallet_code": { "type": "string", "nullable": true },
+                    "pallet_status": { "type": "string", "nullable": true }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing tid" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
     }
