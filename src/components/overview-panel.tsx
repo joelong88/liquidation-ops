@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { query } from '@/lib/db/mysql'
 import { serverNow } from '@/lib/now'
 import { formatDateShort, formatDateLong, formatDateTime } from '@/lib/format-date'
 import { TtxbInventoryBox } from '@/components/ttxb-inventory-box'
@@ -37,16 +37,16 @@ type ParcelRow = {
   effective_value: number | null
   pallet_id: number | null
   batch_id: number | null
-  sack: { area: string } | null
+  sack_area: string | null
 }
 
 type StageEventRow = {
   stage: string
   event_ts: string
   scanned_by: string | null
-  parcel: { parcel_category: string | null } | null
+  parcel_category: string | null
 }
-type SackEventRow = { action: string; event_ts: string; scanned_by: string | null; sack: { area: string } | null }
+type SackEventRow = { action: string; event_ts: string; scanned_by: string | null; sack_area: string | null }
 type PalletEventRow = { action: string; event_ts: string; scanned_by: string | null }
 
 type ActivityDef = {
@@ -76,7 +76,7 @@ const ACTIVITIES: ActivityDef[] = [
 function facilityFor(p: ParcelRow): string {
   if (p.current_stage === 'IN_STORAGE') return 'TTXB Storage Area'
   if (p.current_stage === 'STRIPPED') {
-    return p.sack?.area === 'STORAGE' ? 'Awaiting pallet consolidation (ex-Storage)' : 'Liquidation Area'
+    return p.sack_area === 'STORAGE' ? 'Awaiting pallet consolidation (ex-Storage)' : 'Liquidation Area'
   }
   if (['IN_LIQUIDATION_AREA', 'ON_PALLET', 'ENDORSED', 'SOLD'].includes(p.current_stage)) {
     return 'Liquidation Area'
@@ -97,7 +97,6 @@ function dayKey(iso: string) {
 }
 
 export async function OverviewPanel({ from, to }: { from?: string; to?: string } = {}) {
-  const supabase = await createClient()
   const now = serverNow()
   const nowDate = new Date(now)
   const sevenDayStart = new Date(now - 7 * 24 * 60 * 60 * 1000)
@@ -123,45 +122,39 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
     Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate() - daysSinceMonday)
   )
 
-  const [
-    { data: parcels },
-    { data: events },
-    { data: sackEvents },
-    { data: palletEvents },
-    { data: stuckAtFirstScan },
-    { data: profiles },
-  ] = await Promise.all([
-    supabase
-      .from('parcel')
-      .select('tid, parcel_category, current_stage, effective_value, pallet_id, batch_id, sack:sack_id(area)'),
-    supabase
-      .from('stage_event')
-      .select('stage, event_ts, scanned_by, parcel(parcel_category)')
-      .in('stage', ['RECEIVED', 'IN_STORAGE', 'IN_LIQUIDATION_AREA', 'REPACKED'])
-      .gte('event_ts', earliestNeeded.toISOString()),
-    supabase
-      .from('sack_event')
-      .select('action, event_ts, scanned_by, sack:sack_id(area)')
-      .eq('action', 'STRIPPED')
-      .gte('event_ts', earliestNeeded.toISOString()),
-    supabase
-      .from('pallet_event')
-      .select('action, event_ts, scanned_by')
-      .in('action', ['SACK_ADDED', 'TID_ADDED', 'ENDORSED', 'OUTGOING'])
-      .gte('event_ts', earliestNeeded.toISOString()),
-    supabase
-      .from('parcel')
-      .select('tid, received_at')
-      .eq('current_stage', 'RECEIVED')
-      .order('received_at', { ascending: true }),
-    supabase.from('profile').select('id, email'),
+  const [parcelRows, eventRows, sackEventRows, palletEventRows, stuckAtFirstScan] = await Promise.all([
+    query<ParcelRow>(
+      `select p.tid, p.parcel_category, p.current_stage, p.effective_value, p.pallet_id, p.batch_id, s.area as sack_area
+         from parcel p
+         left join sack s on s.sack_id = p.sack_id`
+    ),
+    query<StageEventRow>(
+      `select se.stage, se.event_ts, se.scanned_by, p.parcel_category
+         from stage_event se
+         left join parcel p on p.tid = se.tid
+        where se.stage in ('RECEIVED', 'IN_STORAGE', 'IN_LIQUIDATION_AREA', 'REPACKED')
+          and se.event_ts >= ?`,
+      [earliestNeeded]
+    ),
+    query<SackEventRow>(
+      `select se.action, se.event_ts, se.scanned_by, s.area as sack_area
+         from sack_event se
+         left join sack s on s.sack_id = se.sack_id
+        where se.action = 'STRIPPED' and se.event_ts >= ?`,
+      [earliestNeeded]
+    ),
+    query<PalletEventRow>(
+      `select action, event_ts, scanned_by
+         from pallet_event
+        where action in ('SACK_ADDED', 'TID_ADDED', 'ENDORSED', 'OUTGOING') and event_ts >= ?`,
+      [earliestNeeded]
+    ),
+    query<{ tid: string; received_at: string | null }>(
+      "select tid, received_at from parcel where current_stage = 'RECEIVED' order by received_at asc"
+    ),
   ])
 
-  const parcelRows = (parcels ?? []) as unknown as ParcelRow[]
-  const eventRows = (events ?? []) as unknown as StageEventRow[]
-  const sackEventRows = (sackEvents ?? []) as unknown as SackEventRow[]
-  const palletEventRows = (palletEvents ?? []) as unknown as PalletEventRow[]
-  const emailById = new Map((profiles ?? []).map((p) => [p.id, p.email]))
+  // scanned_by stores the SSO email directly — no profile join needed.
 
   function countSince(rows: { event_ts: string }[], start: Date) {
     return rows.filter((r) => new Date(r.event_ts).getTime() >= start.getTime()).length
@@ -178,9 +171,9 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
       case 'new_arrival':
         return eventRows.filter((e) => e.stage === 'IN_LIQUIDATION_AREA')
       case 'strip_storage':
-        return sackEventRows.filter((e) => e.sack?.area === 'STORAGE')
+        return sackEventRows.filter((e) => e.sack_area === 'STORAGE')
       case 'strip_liquidation':
-        return sackEventRows.filter((e) => e.sack?.area === 'LIQUIDATION')
+        return sackEventRows.filter((e) => e.sack_area === 'LIQUIDATION')
       case 'consolidate_pallet':
         return palletEventRows.filter((e) => e.action === 'SACK_ADDED' || e.action === 'TID_ADDED')
       case 'endorsement':
@@ -198,11 +191,11 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
   })
 
   // Productivity: same 9 activities, grouped by who scanned them, across three windows.
-  const accountEmails = Array.from(new Set([...emailById.values()])).filter((e): e is string => !!e)
+  const profileRows = await query<{ email: string }>('select email from profile')
+  const accountEmails = profileRows.map((p) => p.email)
   const productivity = accountEmails.map((email) => {
-    const accountId = [...emailById.entries()].find(([, e]) => e === email)?.[0]
     const byActivity = ACTIVITIES.map((a) => {
-      const rows = activityRows(a.key).filter((r) => r.scanned_by === accountId)
+      const rows = activityRows(a.key).filter((r) => r.scanned_by === email)
       return {
         key: a.key,
         label: a.label,
@@ -253,15 +246,14 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
   }))
 
   const ttxbStorageTids = ttxbStorageParcels.map((p) => p.tid)
-  const { data: ttxbEntryForBacklog } = ttxbStorageTids.length
-    ? await supabase
-        .from('stage_event')
-        .select('tid, event_ts')
-        .eq('stage', 'IN_STORAGE')
-        .in('tid', ttxbStorageTids)
-    : { data: [] }
+  const ttxbEntryForBacklog = ttxbStorageTids.length
+    ? await query<{ tid: string; event_ts: string }>(
+        "select tid, event_ts from stage_event where stage = 'IN_STORAGE' and tid in (?)",
+        [ttxbStorageTids]
+      )
+    : []
   const earliestEntryByTid = new Map<string, string>()
-  for (const e of ttxbEntryForBacklog ?? []) {
+  for (const e of ttxbEntryForBacklog) {
     const existing = earliestEntryByTid.get(e.tid)
     if (!existing || new Date(e.event_ts) < new Date(existing)) earliestEntryByTid.set(e.tid, e.event_ts)
   }
@@ -274,15 +266,14 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
   // scan entirely — for those, the pallet's assembled_at (set when the first sack/TID
   // lands on it) is the best available proxy for when the parcel reached the area.
   const liquidationTids = liquidationParcels.map((p) => p.tid)
-  const { data: liqEntryEvents } = liquidationTids.length
-    ? await supabase
-        .from('stage_event')
-        .select('tid, event_ts')
-        .eq('stage', 'IN_LIQUIDATION_AREA')
-        .in('tid', liquidationTids)
-    : { data: [] }
+  const liqEntryEvents = liquidationTids.length
+    ? await query<{ tid: string; event_ts: string }>(
+        "select tid, event_ts from stage_event where stage = 'IN_LIQUIDATION_AREA' and tid in (?)",
+        [liquidationTids]
+      )
+    : []
   const liqEntryByTid = new Map<string, string>()
-  for (const e of liqEntryEvents ?? []) {
+  for (const e of liqEntryEvents) {
     const existing = liqEntryByTid.get(e.tid)
     if (!existing || new Date(e.event_ts) < new Date(existing)) liqEntryByTid.set(e.tid, e.event_ts)
   }
@@ -290,18 +281,24 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
   const palletIdsForAging = Array.from(
     new Set(liquidationParcels.map((p) => p.pallet_id).filter((id): id is number => id != null))
   )
-  const { data: palletsForAging } = palletIdsForAging.length
-    ? await supabase.from('pallet').select('pallet_id, assembled_at').in('pallet_id', palletIdsForAging)
-    : { data: [] }
-  const assembledAtByPallet = new Map((palletsForAging ?? []).map((p) => [p.pallet_id, p.assembled_at]))
+  const palletsForAging = palletIdsForAging.length
+    ? await query<{ pallet_id: number; assembled_at: string | null }>(
+        'select pallet_id, assembled_at from pallet where pallet_id in (?)',
+        [palletIdsForAging]
+      )
+    : []
+  const assembledAtByPallet = new Map(palletsForAging.map((p) => [p.pallet_id, p.assembled_at]))
 
   const batchIdsForAging = Array.from(
     new Set(liquidationSoldParcels.map((p) => p.batch_id).filter((id): id is number => id != null))
   )
-  const { data: salesForAging } = batchIdsForAging.length
-    ? await supabase.from('sale').select('batch_id, sale_date').in('batch_id', batchIdsForAging)
-    : { data: [] }
-  const saleDateByBatch = new Map((salesForAging ?? []).map((s) => [s.batch_id, s.sale_date]))
+  const salesForAging = batchIdsForAging.length
+    ? await query<{ batch_id: number; sale_date: string | null }>(
+        'select batch_id, sale_date from sale where batch_id in (?)',
+        [batchIdsForAging]
+      )
+    : []
+  const saleDateByBatch = new Map(salesForAging.map((s) => [s.batch_id, s.sale_date]))
 
   function liquidationEntryTs(p: ParcelRow): string | null {
     return liqEntryByTid.get(p.tid) ?? (p.pallet_id != null ? (assembledAtByPallet.get(p.pallet_id) ?? null) : null)
@@ -337,7 +334,7 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
     const byCategory = RECEIVED_CATEGORY_ORDER.map(({ code, label }) => ({
       code,
       label,
-      count: inWindow.filter((e) => e.parcel?.parcel_category === code).length,
+      count: inWindow.filter((e) => e.parcel_category === code).length,
     }))
     return { total: inWindow.length, byCategory }
   }
@@ -350,7 +347,7 @@ export async function OverviewPanel({ from, to }: { from?: string; to?: string }
     const byCategory = RECEIVED_CATEGORY_ORDER.map(({ code, label }) => ({
       code,
       label,
-      count: inWindow.filter((e) => e.parcel?.parcel_category === code).length,
+      count: inWindow.filter((e) => e.parcel_category === code).length,
     }))
     return { total: inWindow.length, byCategory }
   }

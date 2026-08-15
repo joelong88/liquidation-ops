@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 import { formatDateTime } from '@/lib/format-date'
 import { ConfirmButton } from '@/components/confirm-button'
 
@@ -35,15 +35,14 @@ export function EndorsePalletsForm({ pallets }: { pallets: Pallet[] }) {
     setPending(true)
     setResult(null)
 
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('endorse_pallets_to_admin', {
-      p_pallet_ids: Array.from(selected),
-    })
+    const r = await callOpsApi<{ ok: boolean; error?: string; endorsed: number[]; skipped: unknown[] }>(
+      'endorse-pallets',
+      { pallet_ids: Array.from(selected) }
+    )
 
-    if (error) {
-      setResult({ ok: false, message: error.message })
+    if (!r.ok) {
+      setResult({ ok: false, message: r.error ?? 'Failed.' })
     } else {
-      const r = data as { ok: boolean; endorsed: number[]; skipped: unknown[] }
       setResult({
         ok: true,
         message: `Endorsed ${r.endorsed.length} of ${selected.size} pallet(s) to admin${

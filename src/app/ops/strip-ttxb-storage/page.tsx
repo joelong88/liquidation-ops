@@ -1,26 +1,34 @@
-import { createClient } from '@/lib/supabase/server'
+import { query } from '@/lib/db/mysql'
 import { serverNow } from '@/lib/now'
 import { StripAndConsolidateForm } from '@/app/ops/strip-and-consolidate-form'
 import { ForceSuccessForm } from '@/app/ops/strip-ttxb-storage/force-success-form'
 import { formatDate } from '@/lib/format-date'
 import { CardHeader } from '@/components/overview-ui'
 
-export default async function StripTtxbStoragePage() {
-  const supabase = await createClient()
-  const { data: sacks } = await supabase
-    .from('sack')
-    .select('sack_id, sack_code, shipper_segment, hold_until, hold_forced_success, status')
-    .eq('area', 'STORAGE')
-    .eq('status', 'CLOSED')
-    .order('hold_until', { ascending: true, nullsFirst: true })
+type SackRow = {
+  sack_id: number
+  sack_code: string
+  shipper_segment: string | null
+  hold_until: string | null
+  hold_forced_success: number
+  status: string
+}
 
-  const sackIds = (sacks ?? []).map((s) => s.sack_id)
-  const { data: memberCounts } = sackIds.length
-    ? await supabase.from('parcel').select('sack_id').in('sack_id', sackIds)
-    : { data: [] }
+export default async function StripTtxbStoragePage() {
+  const sacks = await query<SackRow>(
+    `select sack_id, sack_code, shipper_segment, hold_until, hold_forced_success, status
+       from sack
+      where area = 'STORAGE' and status = 'CLOSED'
+      order by hold_until is null, hold_until asc`
+  )
+
+  const sackIds = sacks.map((s) => s.sack_id)
+  const memberCounts = sackIds.length
+    ? await query<{ sack_id: number | null }>('select sack_id from parcel where sack_id in (?)', [sackIds])
+    : []
 
   const countBySack = new Map<number, number>()
-  for (const row of memberCounts ?? []) {
+  for (const row of memberCounts) {
     if (row.sack_id == null) continue
     countBySack.set(row.sack_id, (countBySack.get(row.sack_id) ?? 0) + 1)
   }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 import { playScanSound } from '@/lib/play-scan-sound'
 
 export function OutboundForm() {
@@ -24,26 +24,21 @@ export function OutboundForm() {
     setConfirmingCode(null)
 
     setPending(true)
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('record_pallet_outbound', { p_pallet_code: value })
+    const result = await callOpsApi<{ ok: boolean; error?: string; status?: string }>('pallet-outbound', {
+      pallet_code: value,
+    })
 
-    let ok = false
-    if (error) {
-      setBanner({ ok: false, message: error.message })
+    const ok = result.ok
+    if (result.ok) {
+      setBanner({ ok: true, message: 'Pallet exit recorded.' })
+    } else if (result.error === 'not_found') {
+      setBanner({ ok: false, message: 'No pallet with that code.' })
+    } else if (result.error === 'not_sold') {
+      setBanner({ ok: false, message: `Pallet isn't sold yet (status: ${result.status}).` })
+    } else if (result.error === 'already_outgoing') {
+      setBanner({ ok: false, message: 'Already recorded as outgoing.' })
     } else {
-      const result = data as { ok: boolean; error?: string; status?: string }
-      ok = result.ok
-      if (result.ok) {
-        setBanner({ ok: true, message: 'Pallet exit recorded.' })
-      } else if (result.error === 'not_found') {
-        setBanner({ ok: false, message: 'No pallet with that code.' })
-      } else if (result.error === 'not_sold') {
-        setBanner({ ok: false, message: `Pallet isn't sold yet (status: ${result.status}).` })
-      } else if (result.error === 'already_outgoing') {
-        setBanner({ ok: false, message: 'Already recorded as outgoing.' })
-      } else {
-        setBanner({ ok: false, message: result.error ?? 'Failed.' })
-      }
+      setBanner({ ok: false, message: result.error ?? 'Failed.' })
     }
     playScanSound(ok ? 'success' : 'error')
     setPalletCode('')

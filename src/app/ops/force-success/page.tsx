@@ -1,17 +1,24 @@
-import { createClient } from '@/lib/supabase/server'
+import { query } from '@/lib/db/mysql'
 import { CsvDownloadButton } from '@/app/ops/force-success/csv-download-button'
 import { formatDate } from '@/lib/format-date'
 import { CardHeader } from '@/components/overview-ui'
 
-export default async function ForceSuccessPage() {
-  const supabase = await createClient()
-  const { data: parcels } = await supabase
-    .from('parcel')
-    .select('tid, current_stage, granular_status, resolved_output_bin, output_resolved_at')
-    .eq('needs_force_success', true)
-    .order('output_resolved_at', { ascending: true })
+type Row = {
+  tid: string
+  current_stage: string
+  granular_status: string | null
+  resolved_output_bin: string | null
+  output_resolved_at: string | null
+}
 
-  const rows = parcels ?? []
+export default async function ForceSuccessPage() {
+  const rows = await query<Row>(
+    `select tid, current_stage, granular_status, resolved_output_bin, output_resolved_at
+       from parcel
+      where needs_force_success = true
+      order by output_resolved_at asc`
+  )
+
   const tidList = rows.map((p) => p.tid).join('\n')
 
   return (

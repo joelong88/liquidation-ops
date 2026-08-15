@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 import { playScanSound } from '@/lib/play-scan-sound'
 
 type LogEntry = { id: number; tid: string; status: 'success' | 'error'; message: string }
@@ -24,28 +24,22 @@ export function RepackForm() {
     if (!value || pending) return
 
     setPending(true)
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('repack_scan', { p_tid: value })
+    const result = await callOpsApi<{ ok: boolean; error?: string; sack_id?: number }>('repack-scan', {
+      tid: value,
+    })
 
     let message: string
-    let ok: boolean
-    if (error) {
-      ok = false
-      message = error.message
+    const ok = result.ok
+    if (result.ok) {
+      message = 'Pulled for repack — rest of the sack unaffected.'
+    } else if (result.error === 'not_found') {
+      message = 'Unknown TID.'
+    } else if (result.error === 'not_in_open_sack') {
+      message = 'This TID isn’t in an open sack.'
+    } else if (result.error === 'sack_not_open_storage') {
+      message = 'This TID’s sack isn’t an open/closed Storage sack.'
     } else {
-      const result = data as { ok: boolean; error?: string; sack_id?: number }
-      ok = result.ok
-      if (result.ok) {
-        message = 'Pulled for repack — rest of the sack unaffected.'
-      } else if (result.error === 'not_found') {
-        message = 'Unknown TID.'
-      } else if (result.error === 'not_in_open_sack') {
-        message = 'This TID isn’t in an open sack.'
-      } else if (result.error === 'sack_not_open_storage') {
-        message = 'This TID’s sack isn’t an open/closed Storage sack.'
-      } else {
-        message = result.error ?? 'Repack failed.'
-      }
+      message = result.error ?? 'Repack failed.'
     }
 
     setBanner({ ok, message })

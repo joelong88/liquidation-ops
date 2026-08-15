@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi, getOpsApi } from '@/lib/ops/client'
 import { formatDate } from '@/lib/format-date'
 import { playScanSound } from '@/lib/play-scan-sound'
 
@@ -47,45 +47,33 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
     setLooking(true)
     setBanner(null)
 
-    const supabase = createClient()
-    const { data: sackRow, error: sackError } = await supabase
-      .from('sack')
-      .select('sack_id, status')
-      .eq('sack_code', value)
-      .eq('area', area)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const result = await getOpsApi<{
+      ok: boolean
+      error?: string
+      status?: string
+      sack_code?: string
+      tids?: string[]
+      already_stripped?: boolean
+    }>('sack-preview', { code: value, area })
 
-    if (sackError || !sackRow) {
-      setBanner({ ok: false, message: `No ${areaLabel} sack with that code.` })
+    if (!result.ok) {
+      const message =
+        result.error === 'not_found'
+          ? `No ${areaLabel} sack with that code.`
+          : result.error === 'still_open'
+            ? `This sack is still open — close it at the ${areaLabel} inbound station first.`
+            : result.error === 'wrong_status'
+              ? `Sack is already ${(result.status ?? '').toLowerCase()}.`
+              : (result.error ?? 'Lookup failed.')
+      setBanner({ ok: false, message })
       setLooking(false)
       return
     }
-    if (sackRow.status === 'OPEN') {
-      setBanner({
-        ok: false,
-        message: `This sack is still open — close it at the ${areaLabel} inbound station first.`,
-      })
-      setLooking(false)
-      return
-    }
-    if (!['CLOSED', 'STRIPPED'].includes(sackRow.status)) {
-      setBanner({ ok: false, message: `Sack is already ${sackRow.status.toLowerCase()}.` })
-      setLooking(false)
-      return
-    }
-
-    const { data: parcels } = await supabase
-      .from('parcel')
-      .select('tid')
-      .eq('sack_id', sackRow.sack_id)
-      .order('tid')
 
     setPreview({
       sackCode: value,
-      tids: (parcels ?? []).map((p) => p.tid),
-      alreadyStripped: sackRow.status === 'STRIPPED',
+      tids: result.tids ?? [],
+      alreadyStripped: Boolean(result.already_stripped),
     })
     setLooking(false)
   }
@@ -94,23 +82,12 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
     if (!preview || pending) return
     setPending(true)
 
-    const supabase = createClient()
-
     if (!preview.alreadyStripped) {
-      const { data, error } = await supabase.rpc('strip_sack', {
-        p_sack_code: preview.sackCode,
-        p_area: area,
+      const result = await callOpsApi<{ ok: boolean; error?: string; hold_until?: string }>('strip-sack', {
+        sack_code: preview.sackCode,
+        area,
       })
 
-      if (error) {
-        pushEntry(preview.sackCode, 'error', error.message)
-        setPreview(null)
-        setSackCode('')
-        setPending(false)
-        setTimeout(() => sackRef.current?.focus(), 0)
-        return
-      }
-      const result = data as { ok: boolean; error?: string; hold_until?: string }
       if (!result.ok) {
         const message =
           result.error === 'hold_not_matured'
@@ -131,28 +108,20 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
       }
     }
 
-    const { data: assignData, error: assignError } = await supabase.rpc('assign_pallet', {
-      p_pallet_code: palletCode.trim(),
-      p_sack_codes: [preview.sackCode],
-    })
+    const r = await callOpsApi<{
+      ok: boolean
+      error?: string
+      added_sacks: string[]
+      skipped: { sack_code?: string; reason: string }[]
+    }>('assign-pallet', { pallet_code: palletCode.trim(), sack_codes: [preview.sackCode] })
 
-    if (assignError) {
-      pushEntry(preview.sackCode, 'error', `Stripped, but pallet assignment failed: ${assignError.message}`)
+    if (!r.ok) {
+      pushEntry(preview.sackCode, 'error', `Stripped, but pallet assignment failed: ${r.error ?? 'unknown error'}`)
+    } else if (r.skipped.length > 0) {
+      pushEntry(preview.sackCode, 'error', `Stripped, but not added to pallet: ${r.skipped[0].reason}`)
     } else {
-      const r = assignData as {
-        ok: boolean
-        error?: string
-        added_sacks: string[]
-        skipped: { sack_code?: string; reason: string }[]
-      }
-      if (!r.ok) {
-        pushEntry(preview.sackCode, 'error', `Stripped, but pallet assignment failed: ${r.error ?? 'unknown error'}`)
-      } else if (r.skipped.length > 0) {
-        pushEntry(preview.sackCode, 'error', `Stripped, but not added to pallet: ${r.skipped[0].reason}`)
-      } else {
-        pushEntry(preview.sackCode, 'success', `Added to pallet ${palletCode.trim()}.`)
-        router.refresh()
-      }
+      pushEntry(preview.sackCode, 'success', `Added to pallet ${palletCode.trim()}.`)
+      router.refresh()
     }
 
     setPreview(null)
@@ -167,28 +136,21 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
     setClosingPallet(true)
     setConfirmingClosePallet(false)
 
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('close_pallet', { p_pallet_code: value })
+    const result = await callOpsApi<{ ok: boolean; error?: string }>('close-pallet', { pallet_code: value })
 
-    if (error) {
-      setBanner({ ok: false, message: error.message })
+    if (result.ok) {
+      setBanner({ ok: true, message: `Pallet ${value} closed. Scan a new pallet ID for the next one.` })
+      setPalletCode('')
+      playScanSound('success')
+    } else if (result.error === 'not_found') {
+      setBanner({ ok: false, message: 'No assembling pallet with that code.' })
+      playScanSound('error')
+    } else if (result.error === 'already_closed') {
+      setBanner({ ok: false, message: 'Already closed.' })
       playScanSound('error')
     } else {
-      const result = data as { ok: boolean; error?: string }
-      if (result.ok) {
-        setBanner({ ok: true, message: `Pallet ${value} closed. Scan a new pallet ID for the next one.` })
-        setPalletCode('')
-        playScanSound('success')
-      } else if (result.error === 'not_found') {
-        setBanner({ ok: false, message: 'No assembling pallet with that code.' })
-        playScanSound('error')
-      } else if (result.error === 'already_closed') {
-        setBanner({ ok: false, message: 'Already closed.' })
-        playScanSound('error')
-      } else {
-        setBanner({ ok: false, message: result.error ?? 'Close failed.' })
-        playScanSound('error')
-      }
+      setBanner({ ok: false, message: result.error ?? 'Close failed.' })
+      playScanSound('error')
     }
     setClosingPallet(false)
     setTimeout(() => palletRef.current?.focus(), 0)

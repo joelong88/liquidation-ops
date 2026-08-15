@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 import { formatDateTime } from '@/lib/format-date'
 import { playScanSound } from '@/lib/play-scan-sound'
 
@@ -54,17 +54,9 @@ export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshol
     if (!value || pending) return
 
     setPending(true)
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('record_first_scan', { p_tid: value })
-
-    if (error) {
-      setResult({ ok: false, error: error.message })
-      playScanSound('error')
-    } else {
-      const r = data as BinResult
-      setResult(r)
-      playScanSound(r.ok ? soundKindForBin(r.bin) : 'error')
-    }
+    const r = await callOpsApi<BinResult>('first-scan', { tid: value })
+    setResult(r)
+    playScanSound(r.ok ? soundKindForBin(r.bin) : 'error')
     setScannedTid(value)
     setTid('')
     setPending(false)

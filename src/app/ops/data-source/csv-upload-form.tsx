@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 
 const HEADER_ALIASES: Record<string, string> = {
   tid: 'tid',
@@ -133,14 +133,15 @@ export function CsvUploadForm() {
         return
       }
 
-      const supabase = createClient()
-      const { data, error: rpcError } = await supabase.rpc('import_parcel_rows', { p_rows: rows })
+      const r = await callOpsApi<{ ok: boolean; error?: string; imported?: number; skipped?: Skipped[] }>(
+        'import-csv',
+        { rows }
+      )
 
-      if (rpcError) {
-        setError(rpcError.message)
+      if (!r.ok) {
+        setError(r.error ?? 'Import failed.')
       } else {
-        const r = data as { ok: boolean; imported: number; skipped: Skipped[] }
-        setResult({ imported: r.imported, skipped: r.skipped })
+        setResult({ imported: r.imported ?? 0, skipped: r.skipped ?? [] })
         router.refresh()
       }
     } catch {

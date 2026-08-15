@@ -1,9 +1,33 @@
 import { notFound } from 'next/navigation'
 import { requireRole, AccessRestricted } from '@/lib/auth/role-gate'
-import { createClient } from '@/lib/supabase/server'
+import { query } from '@/lib/db/mysql'
 import { RecordBidForm } from '@/app/recovery/batches/[batchId]/record-bid-form'
 import { BackLink } from '@/components/back-link'
 import { OverviewCanvas, Card, CardHeader, StatCard } from '@/components/overview-ui'
+
+type Batch = {
+  batch_id: number
+  batch_number: number
+  batch_type: string
+  status: string
+  ceiling_price: number | null
+  floor_price: number | null
+}
+
+type Parcel = {
+  tid: string
+  pallet_id: number | null
+  item_type: string | null
+  effective_value: number | null
+  is_synthetic_tid: number
+}
+
+type Sale = {
+  sale_amount: number
+  buyer_name: string | null
+  payment_status: string
+  sale_date: string | null
+}
 
 export default async function BatchDetailPage({
   params,
@@ -14,35 +38,30 @@ export default async function BatchDetailPage({
   const profile = await requireRole(['recovery_team', 'finance_team', 'owner'])
   if (!profile) return <AccessRestricted />
 
-  const supabase = await createClient()
-  const { data: batch } = await supabase
-    .from('batch')
-    .select('*')
-    .eq('batch_id', Number(batchId))
-    .single()
+  const batchRows = await query<Batch>('select * from batch where batch_id = ?', [Number(batchId)])
+  const batch = batchRows[0]
 
   if (!batch) notFound()
 
-  const [{ data: parcels }, { data: pallets }, { data: sale }] = await Promise.all([
-    supabase
-      .from('parcel')
-      .select('tid, pallet_id, item_type, effective_value, is_synthetic_tid')
-      .eq('batch_id', batch.batch_id)
-      .order('tid'),
-    supabase
-      .from('pallet')
-      .select('pallet_id, pallet_code, status')
-      .eq('batch_id', batch.batch_id)
-      .order('pallet_code'),
-    supabase.from('sale').select('*').eq('batch_id', batch.batch_id).maybeSingle(),
+  const [parcels, pallets, saleRows] = await Promise.all([
+    query<Parcel>(
+      'select tid, pallet_id, item_type, effective_value, is_synthetic_tid from parcel where batch_id = ? order by tid',
+      [batch.batch_id]
+    ),
+    query<{ pallet_id: number; pallet_code: string; status: string }>(
+      'select pallet_id, pallet_code, status from pallet where batch_id = ? order by pallet_code',
+      [batch.batch_id]
+    ),
+    query<Sale>('select * from sale where batch_id = ?', [batch.batch_id]),
   ])
+  const sale = saleRows[0]
 
   // Ceiling = live sum of GMV (effective_value = COD or manual estimate) across this
   // batch's actual parcels, rather than the batch.ceiling_price column — that column
   // is only ever refreshed by recompute_batch_pricing (which also only sums cod_value,
   // missing manually-valued NO-AWB parcels) and can go stale.
-  const totalTids = parcels?.length ?? 0
-  const ceilingSum = (parcels ?? []).reduce((sum, p) => sum + (Number(p.effective_value) || 0), 0)
+  const totalTids = parcels.length
+  const ceilingSum = parcels.reduce((sum, p) => sum + (Number(p.effective_value) || 0), 0)
   const avgGmv = totalTids > 0 ? ceilingSum / totalTids : null
   const recoveryRate = sale && ceilingSum > 0 ? (sale.sale_amount / ceilingSum) * 100 : null
 
@@ -50,8 +69,8 @@ export default async function BatchDetailPage({
   // have no sack/pallet at all) — group by pallet rather than listing every raw TID.
   const tidCountByPallet = new Map<number, number>()
   const gmvByPallet = new Map<number, number>()
-  const noAwbParcels: typeof parcels = []
-  for (const p of parcels ?? []) {
+  const noAwbParcels: Parcel[] = []
+  for (const p of parcels) {
     if (p.pallet_id == null) {
       noAwbParcels.push(p)
       continue
@@ -59,7 +78,7 @@ export default async function BatchDetailPage({
     tidCountByPallet.set(p.pallet_id, (tidCountByPallet.get(p.pallet_id) ?? 0) + 1)
     gmvByPallet.set(p.pallet_id, (gmvByPallet.get(p.pallet_id) ?? 0) + (Number(p.effective_value) || 0))
   }
-  const palletRows = (pallets ?? []).map((pl) => ({
+  const palletRows = pallets.map((pl) => ({
     ...pl,
     tidCount: tidCountByPallet.get(pl.pallet_id) ?? 0,
     gmv: gmvByPallet.get(pl.pallet_id) ?? 0,

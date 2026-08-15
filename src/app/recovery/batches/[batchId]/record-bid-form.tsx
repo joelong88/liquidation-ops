@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 
 export function RecordBidForm({ batchId }: { batchId: number }) {
   const router = useRouter()
@@ -17,22 +17,16 @@ export function RecordBidForm({ batchId }: { batchId: number }) {
     setPending(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: rpcError } = await supabase.rpc('record_batch_sale', {
-      p_batch_id: batchId,
-      p_buyer_name: buyerName,
-      p_sale_amount: Number(amount),
+    const r = await callOpsApi<{ ok: boolean; error?: string }>('batch-sale', {
+      batch_id: batchId,
+      buyer_name: buyerName,
+      sale_amount: Number(amount),
     })
 
-    if (rpcError) {
-      setError(rpcError.message)
+    if (r.ok) {
+      router.refresh()
     } else {
-      const r = data as { ok: boolean; error?: string }
-      if (r.ok) {
-        router.refresh()
-      } else {
-        setError(r.error ?? 'Failed to record sale.')
-      }
+      setError(r.error ?? 'Failed to record sale.')
     }
     setPending(false)
   }

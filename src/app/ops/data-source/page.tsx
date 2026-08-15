@@ -1,30 +1,55 @@
-import { createClient } from '@/lib/supabase/server'
+import { query } from '@/lib/db/mysql'
 import { CsvUploadForm } from '@/app/ops/data-source/csv-upload-form'
 import { formatDateTime } from '@/lib/format-date'
 import { CardHeader } from '@/components/overview-ui'
 
+type PendingRow = {
+  tid: string
+  granular_status: string | null
+  pets_ticket_type: string | null
+  pets_ticket_subtype: string | null
+  pets_ticket_outcome: string | null
+  shipper_segment_raw: string | null
+  goods_value: number | null
+  cod_value: number | null
+  insurance_value: number | null
+  xb_value_usd: number | null
+  imported_at: string
+}
+
+type UploadRow = {
+  upload_id: number
+  uploaded_at: string
+  uploaded_by: string | null
+  total_rows: number
+  imported_count: number
+  skipped_count: number
+  ttxb_count: number
+  non_ttxb_count: number
+}
+
 export default async function DataSourcePage() {
-  const supabase = await createClient()
-  const [{ data: pending }, { count }, { data: uploads }, { data: profiles }] = await Promise.all([
-    supabase
-      .from('parcel_import')
-      .select(
-        'tid, granular_status, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, shipper_segment_raw, goods_value, cod_value, insurance_value, xb_value_usd, imported_at'
-      )
-      .is('consumed_at', null)
-      .order('imported_at', { ascending: false })
-      .limit(50),
-    supabase.from('parcel_import').select('tid', { count: 'exact', head: true }).is('consumed_at', null),
-    supabase
-      .from('csv_upload_log')
-      .select('upload_id, uploaded_at, uploaded_by, total_rows, imported_count, skipped_count, ttxb_count, non_ttxb_count')
-      .order('uploaded_at', { ascending: false })
-      .limit(30),
-    supabase.from('profile').select('id, full_name'),
+  const [rows, countRows, uploads, profiles] = await Promise.all([
+    query<PendingRow>(
+      `select tid, granular_status, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome,
+              shipper_segment_raw, goods_value, cod_value, insurance_value, xb_value_usd, imported_at
+         from parcel_import
+        where consumed_at is null
+        order by imported_at desc
+        limit 50`
+    ),
+    query<{ count: number }>('select count(*) as count from parcel_import where consumed_at is null'),
+    query<UploadRow>(
+      `select upload_id, uploaded_at, uploaded_by, total_rows, imported_count, skipped_count, ttxb_count, non_ttxb_count
+         from csv_upload_log
+        order by uploaded_at desc
+        limit 30`
+    ),
+    query<{ email: string; full_name: string | null }>('select email, full_name from profile'),
   ])
 
-  const rows = pending ?? []
-  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]))
+  const count = countRows[0]?.count ?? 0
+  const nameById = new Map(profiles.map((p) => [p.email, p.full_name]))
 
   return (
     <div className="flex flex-col gap-6">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { getOpsApi } from '@/lib/ops/client'
 
 type Location = {
   tid: string
@@ -26,29 +26,20 @@ export function TidLocationChecker() {
 
     setPending(true)
     setResult(null)
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('parcel')
-      .select(
-        'tid, current_stage, resolved_output_bin, sack:sack_id(sack_code, area, status), pallet:pallet_id(pallet_code, status)'
-      )
-      .eq('tid', value)
-      .maybeSingle()
+    const data = await getOpsApi<{ ok: boolean } & Partial<Location>>('locate-tid', { tid: value })
 
-    if (!data) {
+    if (!data.ok) {
       setResult('not_found')
     } else {
-      const sack = data.sack as unknown as { sack_code: string; area: string; status: string } | null
-      const pallet = data.pallet as unknown as { pallet_code: string; status: string } | null
       setResult({
-        tid: data.tid,
-        current_stage: data.current_stage,
-        resolved_output_bin: data.resolved_output_bin,
-        sack_code: sack?.sack_code ?? null,
-        sack_area: sack?.area ?? null,
-        sack_status: sack?.status ?? null,
-        pallet_code: pallet?.pallet_code ?? null,
-        pallet_status: pallet?.status ?? null,
+        tid: data.tid ?? value,
+        current_stage: data.current_stage ?? '',
+        resolved_output_bin: data.resolved_output_bin ?? null,
+        sack_code: data.sack_code ?? null,
+        sack_area: data.sack_area ?? null,
+        sack_status: data.sack_status ?? null,
+        pallet_code: data.pallet_code ?? null,
+        pallet_status: data.pallet_status ?? null,
       })
     }
     setPending(false)

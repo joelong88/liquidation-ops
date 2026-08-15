@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 
 type Pallet = { pallet_id: number; pallet_code: string }
 
@@ -53,39 +53,33 @@ export function SellPalletsForm({ pallets }: { pallets: Pallet[] }) {
     setResult(null)
 
     const amount = Number(amountDisplay.replace(/,/g, ''))
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('record_pallet_sale', {
-      p_pallet_ids: Array.from(selected),
-      p_buyer_name: buyerName,
-      p_sale_amount: amount,
-      p_sale_date: saleDate,
+    const r = await callOpsApi<{
+      ok: boolean
+      error?: string
+      batch_id?: number
+      sold_pallets: number[]
+      skipped: unknown[]
+    }>('pallet-sale', {
+      pallet_ids: Array.from(selected),
+      buyer_name: buyerName,
+      sale_amount: amount,
+      sale_date: saleDate,
     })
 
-    if (error) {
-      setResult({ ok: false, message: error.message })
+    if (!r.ok) {
+      setResult({ ok: false, message: r.error ?? 'Failed.' })
     } else {
-      const r = data as {
-        ok: boolean
-        error?: string
-        batch_id?: number
-        sold_pallets: number[]
-        skipped: unknown[]
-      }
-      if (!r.ok) {
-        setResult({ ok: false, message: r.error ?? 'Failed.' })
-      } else {
-        setResult({
-          ok: true,
-          message: `Sold ${r.sold_pallets.length} pallet(s) into batch #${r.batch_id}${
-            r.skipped.length > 0 ? ` (${r.skipped.length} skipped)` : ''
-          }.`,
-        })
-        setSelected(new Set())
-        setBuyerName('')
-        setAmountDisplay('')
-        setSaleDate(todayIso())
-        router.refresh()
-      }
+      setResult({
+        ok: true,
+        message: `Sold ${r.sold_pallets.length} pallet(s) into batch #${r.batch_id}${
+          r.skipped.length > 0 ? ` (${r.skipped.length} skipped)` : ''
+        }.`,
+      })
+      setSelected(new Set())
+      setBuyerName('')
+      setAmountDisplay('')
+      setSaleDate(todayIso())
+      router.refresh()
     }
     setPending(false)
   }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi } from '@/lib/ops/client'
 
 export function ForceSuccessForm({ sackCode }: { sackCode: string }) {
   const router = useRouter()
@@ -17,19 +17,11 @@ export function ForceSuccessForm({ sackCode }: { sackCode: string }) {
     setPending(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: rpcError } = await supabase.rpc('force_sack_hold_success', {
-      p_sack_code: sackCode,
-      p_reason: reason.trim(),
+    const result = await callOpsApi<{ ok: boolean; error?: string }>('force-sack-hold-success', {
+      sack_code: sackCode,
+      reason: reason.trim(),
     })
 
-    if (rpcError) {
-      setError(rpcError.message)
-      setPending(false)
-      return
-    }
-
-    const result = data as { ok: boolean; error?: string }
     if (!result.ok) {
       setError(result.error ?? 'Failed.')
       setPending(false)

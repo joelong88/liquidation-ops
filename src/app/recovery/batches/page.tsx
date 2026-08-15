@@ -1,44 +1,64 @@
 import Link from 'next/link'
 import { requireRole, AccessRestricted } from '@/lib/auth/role-gate'
-import { createClient } from '@/lib/supabase/server'
+import { query } from '@/lib/db/mysql'
 import { SellPalletsForm } from '@/app/recovery/batches/sell-pallets-form'
 import { PalletManifestRow } from '@/app/recovery/batches/pallet-manifest-row'
 import { BackToDashboard } from '@/components/back-to-dashboard'
 import { OverviewCanvas, Card, CardHeader } from '@/components/overview-ui'
 
+type BatchRow = {
+  batch_id: number
+  batch_number: number
+  batch_type: string
+  status: string
+  ceiling_price: number | null
+  floor_price: number | null
+  month: string | null
+  parcel_count: number
+}
+
+type PalletRow = {
+  pallet_id: number
+  pallet_code: string
+  status: string
+  batch_id: number | null
+  assembled_at: string | null
+  endorsed_at: string | null
+  outgoing_at: string | null
+}
+
 export default async function BatchesPage() {
   const profile = await requireRole(['recovery_team', 'finance_team', 'owner'])
   if (!profile) return <AccessRestricted />
 
-  const supabase = await createClient()
-  const [{ data: batches }, { data: endorsedPallets }, { data: allPallets }, { data: palletParcels }, { data: batchParcels }, { data: sales }] =
-    await Promise.all([
-      supabase
-        .from('batch')
-        .select('batch_id, batch_number, batch_type, status, ceiling_price, floor_price, month, parcel(count)')
-        .order('batch_number', { ascending: false }),
-      supabase
-        .from('pallet')
-        .select('pallet_id, pallet_code')
-        .eq('status', 'ENDORSED')
-        .is('batch_id', null)
-        .order('endorsed_at', { ascending: true }),
-      supabase
-        .from('pallet')
-        .select('pallet_id, pallet_code, status, batch_id, assembled_at, endorsed_at, outgoing_at')
-        .order('assembled_at', { ascending: false }),
-      supabase
-        .from('parcel')
-        .select('pallet_id, tid, effective_value, manual_value_item_description')
-        .not('pallet_id', 'is', null),
-      supabase.from('parcel').select('batch_id, effective_value').not('batch_id', 'is', null),
-      supabase.from('sale').select('batch_id, sale_amount, payment_status').not('batch_id', 'is', null),
-    ])
+  const [batches, endorsedPallets, allPallets, palletParcels, batchParcels, sales] = await Promise.all([
+    query<BatchRow>(
+      `select b.batch_id, b.batch_number, b.batch_type, b.status, b.ceiling_price, b.floor_price, b.month,
+              (select count(*) from parcel p where p.batch_id = b.batch_id) as parcel_count
+         from batch b
+        order by b.batch_number desc`
+    ),
+    query<{ pallet_id: number; pallet_code: string }>(
+      "select pallet_id, pallet_code from pallet where status = 'ENDORSED' and batch_id is null order by endorsed_at asc"
+    ),
+    query<PalletRow>(
+      'select pallet_id, pallet_code, status, batch_id, assembled_at, endorsed_at, outgoing_at from pallet order by assembled_at desc'
+    ),
+    query<{ pallet_id: number | null; tid: string; effective_value: number | null; manual_value_item_description: string | null }>(
+      'select pallet_id, tid, effective_value, manual_value_item_description from parcel where pallet_id is not null'
+    ),
+    query<{ batch_id: number | null; effective_value: number | null }>(
+      'select batch_id, effective_value from parcel where batch_id is not null'
+    ),
+    query<{ batch_id: number | null; sale_amount: number; payment_status: string }>(
+      'select batch_id, sale_amount, payment_status from sale where batch_id is not null'
+    ),
+  ])
 
   const tidCountByPallet = new Map<number, number>()
   const gmvByPallet = new Map<number, number>()
   const manifestByPallet = new Map<number, { tid: string; description: string | null; gmv: number }[]>()
-  for (const p of palletParcels ?? []) {
+  for (const p of palletParcels) {
     if (p.pallet_id == null) continue
     tidCountByPallet.set(p.pallet_id, (tidCountByPallet.get(p.pallet_id) ?? 0) + 1)
     gmvByPallet.set(p.pallet_id, (gmvByPallet.get(p.pallet_id) ?? 0) + (Number(p.effective_value) || 0))
@@ -52,33 +72,33 @@ export default async function BatchesPage() {
   }
 
   const gmvByBatch = new Map<number, number>()
-  for (const p of batchParcels ?? []) {
+  for (const p of batchParcels) {
     if (p.batch_id == null) continue
     gmvByBatch.set(p.batch_id, (gmvByBatch.get(p.batch_id) ?? 0) + (Number(p.effective_value) || 0))
   }
 
   const saleByBatch = new Map<number, { sale_amount: number; payment_status: string }>()
-  for (const s of sales ?? []) {
+  for (const s of sales) {
     if (s.batch_id == null) continue
     saleByBatch.set(s.batch_id, { sale_amount: Number(s.sale_amount), payment_status: s.payment_status })
   }
 
   const batchNumberById = new Map<number, number>()
-  for (const b of batches ?? []) {
+  for (const b of batches) {
     batchNumberById.set(b.batch_id, b.batch_number)
   }
 
   // A batch bundles multiple pallets into one sale — surface which pallet codes
   // belong to each batch right in this top-level list, not just on drill-in.
   const palletCodesByBatch = new Map<number, string[]>()
-  for (const p of allPallets ?? []) {
+  for (const p of allPallets) {
     if (p.batch_id == null) continue
     const codes = palletCodesByBatch.get(p.batch_id) ?? []
     codes.push(p.pallet_code)
     palletCodesByBatch.set(p.batch_id, codes)
   }
 
-  const palletRows = (allPallets ?? [])
+  const palletRows = allPallets
     .map((p) => {
       const sale = p.batch_id != null ? saleByBatch.get(p.batch_id) : undefined
       const batchGmv = p.batch_id != null ? gmvByBatch.get(p.batch_id) : undefined
@@ -151,7 +171,7 @@ export default async function BatchesPage() {
                   </td>
                   <td className="py-2 pr-4">{b.batch_type}</td>
                   <td className="py-2 pr-4">{b.status}</td>
-                  <td className="py-2 pr-4">{b.parcel?.[0]?.count ?? 0}</td>
+                  <td className="py-2 pr-4">{b.parcel_count ?? 0}</td>
                   <td className="py-2 pr-4">
                     {b.ceiling_price != null ? `₱${Number(b.ceiling_price).toLocaleString()}` : '—'}
                   </td>

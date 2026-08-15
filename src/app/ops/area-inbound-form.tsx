@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { callOpsApi, getOpsApi } from '@/lib/ops/client'
 import { formatDateTime } from '@/lib/format-date'
 import { playScanSound } from '@/lib/play-scan-sound'
 import { ConfirmButton } from '@/components/confirm-button'
@@ -33,63 +33,13 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
       setSackTidCount(null)
       return
     }
-    const supabase = createClient()
-    const { data: sackRow } = await supabase
-      .from('sack')
-      .select('sack_id')
-      .eq('sack_code', code)
-      .eq('status', 'OPEN')
-      .maybeSingle()
-    if (!sackRow) {
-      setSackTidCount(null)
-      return
-    }
-    const { count } = await supabase
-      .from('parcel')
-      .select('tid', { count: 'exact', head: true })
-      .eq('sack_id', sackRow.sack_id)
-    setSackTidCount(count ?? 0)
+    const r = await getOpsApi<{ sack_id: number | null; tid_count: number | null }>('sack-status', { code })
+    setSackTidCount(r.tid_count)
   }
 
   async function refreshClosedToday() {
-    const supabase = createClient()
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-
-    const { data: events } = await supabase
-      .from('sack_event')
-      .select('event_ts, sack:sack_id(sack_id, sack_code, area)')
-      .eq('action', 'CLOSED')
-      .gte('event_ts', todayStart.toISOString())
-      .order('event_ts', { ascending: false })
-
-    const relevant = (events ?? []).filter(
-      (e) => (e.sack as unknown as { area: string } | null)?.area === area
-    )
-    const sackIds = relevant
-      .map((e) => (e.sack as unknown as { sack_id: number } | null)?.sack_id)
-      .filter((id): id is number => id != null)
-
-    const countBySack = new Map<number, number>()
-    if (sackIds.length > 0) {
-      const { data: parcels } = await supabase.from('parcel').select('sack_id').in('sack_id', sackIds)
-      for (const p of parcels ?? []) {
-        if (p.sack_id == null) continue
-        countBySack.set(p.sack_id, (countBySack.get(p.sack_id) ?? 0) + 1)
-      }
-    }
-
-    setClosedToday(
-      relevant.map((e) => {
-        const s = e.sack as unknown as { sack_id: number; sack_code: string }
-        return {
-          sack_id: s.sack_id,
-          sack_code: s.sack_code,
-          closed_at: e.event_ts,
-          tid_count: countBySack.get(s.sack_id) ?? 0,
-        }
-      })
-    )
+    const r = await getOpsApi<{ sacks: ClosedSack[] }>('closed-today', { area })
+    setClosedToday(r.sacks ?? [])
   }
 
   useEffect(() => {
@@ -109,29 +59,22 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
     if (!tidValue || !sackValue || pending) return
 
     setPending(true)
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('record_area_inbound_scan', {
-      p_tid: tidValue,
-      p_sack_code: sackValue,
-      p_area: area,
-    })
+    const result = await callOpsApi<{ ok: boolean; error?: string; sack_area?: string; sack_code?: string }>(
+      'area-inbound-scan',
+      { tid: tidValue, sack_code: sackValue, area }
+    )
 
-    if (error) {
-      pushEntry(tidValue, 'error', error.message)
+    if (result.ok) {
+      pushEntry(tidValue, 'success', `Recorded into sack ${sackValue}.`)
+      refreshSackCount(sackValue)
+    } else if (result.error === 'not_first_scanned') {
+      pushEntry(tidValue, 'error', 'This TID hasn’t been through First Scan yet.')
+    } else if (result.error === 'already_in_sack') {
+      pushEntry(tidValue, 'error', `Already assigned to sack ${result.sack_code ?? '(unknown)'}.`)
+    } else if (result.error === 'area_mismatch') {
+      pushEntry(tidValue, 'error', `Sack ${sackValue} is already open in ${result.sack_area}.`)
     } else {
-      const result = data as { ok: boolean; error?: string; sack_area?: string; sack_code?: string }
-      if (result.ok) {
-        pushEntry(tidValue, 'success', `Recorded into sack ${sackValue}.`)
-        refreshSackCount(sackValue)
-      } else if (result.error === 'not_first_scanned') {
-        pushEntry(tidValue, 'error', 'This TID hasn’t been through First Scan yet.')
-      } else if (result.error === 'already_in_sack') {
-        pushEntry(tidValue, 'error', `Already assigned to sack ${result.sack_code ?? '(unknown)'}.`)
-      } else if (result.error === 'area_mismatch') {
-        pushEntry(tidValue, 'error', `Sack ${sackValue} is already open in ${result.sack_area}.`)
-      } else {
-        pushEntry(tidValue, 'error', result.error ?? 'Scan failed.')
-      }
+      pushEntry(tidValue, 'error', result.error ?? 'Scan failed.')
     }
 
     setTid('')
@@ -144,25 +87,19 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
     if (!sackValue || closing) return
     setClosing(true)
 
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('close_sack', { p_sack_code: sackValue })
+    const result = await callOpsApi<{ ok: boolean; error?: string }>('close-sack', { sack_code: sackValue })
 
-    if (error) {
-      pushEntry(sackValue, 'error', error.message)
+    if (result.ok) {
+      pushEntry(sackValue, 'success', `Sack ${sackValue} closed. Scan a new sack ID for the next one.`)
+      setSackCode('')
+      setSackTidCount(null)
+      refreshClosedToday()
+    } else if (result.error === 'not_found') {
+      pushEntry(sackValue, 'error', 'No open sack with that code.')
+    } else if (result.error === 'already_closed') {
+      pushEntry(sackValue, 'error', 'Already closed.')
     } else {
-      const result = data as { ok: boolean; error?: string }
-      if (result.ok) {
-        pushEntry(sackValue, 'success', `Sack ${sackValue} closed. Scan a new sack ID for the next one.`)
-        setSackCode('')
-        setSackTidCount(null)
-        refreshClosedToday()
-      } else if (result.error === 'not_found') {
-        pushEntry(sackValue, 'error', 'No open sack with that code.')
-      } else if (result.error === 'already_closed') {
-        pushEntry(sackValue, 'error', 'Already closed.')
-      } else {
-        pushEntry(sackValue, 'error', result.error ?? 'Close failed.')
-      }
+      pushEntry(sackValue, 'error', result.error ?? 'Close failed.')
     }
     setClosing(false)
     setTimeout(() => sackRef.current?.focus(), 0)
