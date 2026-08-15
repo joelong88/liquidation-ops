@@ -108,7 +108,7 @@ export default async function AdminUsersPage() {
                       <input type="hidden" name="is_active" value={u.is_active ? 'false' : 'true'} />
                       <button
                         type="submit"
-                        disabled={!u.is_active && u.email === profile.email}
+                        disabled={Boolean(u.is_active) && u.email === profile.email}
                         className={`rounded-full px-2 py-0.5 text-xs disabled:opacity-40 ${
                           u.is_active
                             ? 'bg-emerald-100 text-emerald-800 hover:bg-red-100 hover:text-red-800'
