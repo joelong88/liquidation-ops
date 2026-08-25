@@ -14,6 +14,13 @@ function getPool(): mysql.Pool {
       decimalNumbers: true,
       dateStrings: false,
       connectionLimit: 10,
+      // Force the session to UTC so current_timestamp(6) (used as the default for
+      // every event_ts/created_at column) stores true UTC, not whatever timezone
+      // the DB server's own clock happens to be set to (observed: Manila, UTC+8).
+      // Without this, a raw Manila wall-clock value gets stored untagged, then the
+      // app's display logic (format-date.ts) applies ITS OWN Manila conversion on
+      // top — double-shifting every timestamp 8 hours into the future.
+      timezone: 'Z',
     })
   }
   return pool
