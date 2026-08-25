@@ -6,16 +6,15 @@
 -- "most columns matched" like the existing 5. Kept as its own column rather than
 -- folded into the specific-match-count tiebreak (see V6) so that override semantics
 -- don't get muddled with the normal ranking.
-alter table output_mapping_rule add column recovery_name varchar(255) null;
-alter table parcel_import add column recovery_name varchar(255) null;
-alter table parcel add column recovery_name varchar(255) null;
-
--- Recompute the dedupe key to include the new column, so two override rules with
--- the same recovery_name (and otherwise-null columns) for the same upload still
--- collide as duplicates the way the original 5-column combo already does.
--- OceanBase rejects ALTER ... MODIFY COLUMN on a generated column definition
--- (error 1235), so drop and recreate it instead of modifying in place — dropping
--- the column also drops its unique index automatically, so that's recreated too.
+--
+-- NOTE: the ADD COLUMN recovery_name statements (on output_mapping_rule,
+-- parcel_import, parcel) that originally lived here are gone on purpose — this
+-- migration failed twice before landing (once on ALTER...MODIFY of a generated
+-- column, which OceanBase rejects outright), and DDL auto-commits per statement
+-- regardless of the overall migration's failure, so those 3 columns already exist
+-- live from the first failed attempt. Re-adding them here would just be a
+-- duplicate-column error on redeploy. Only the statements that never successfully
+-- ran remain below.
 alter table output_mapping_rule drop column dedupe_key;
 alter table output_mapping_rule add column dedupe_key varchar(700) generated always as (
   concat_ws(char(1), upload_id,
