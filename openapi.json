@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Liquidation Ops",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "Warehouse operations app for a 3PL parcel-liquidation process (NinjaVan Philippines). Tracks parcels from receiving-dock intake through sack/pallet consolidation, endorsement, and sale, entirely on OceanBase (MySQL-wire) with authorization backed by Substrait's Google-SSO-forwarded identity."
   },
   "components": {
