@@ -49,6 +49,9 @@ const HEADER_ALIASES: Record<string, string> = {
   shippersegment: 'shipper_segment_raw',
   shipper_segment: 'shipper_segment_raw',
   segment: 'shipper_segment_raw',
+  name: 'recovery_name',
+  recoveryname: 'recovery_name',
+  recovery_name: 'recovery_name',
 }
 
 function parseCsv(text: string): Record<string, string>[] {

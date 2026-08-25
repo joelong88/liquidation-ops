@@ -10,6 +10,7 @@ type PendingRow = {
   pets_ticket_subtype: string | null
   pets_ticket_outcome: string | null
   shipper_segment_raw: string | null
+  recovery_name: string | null
   goods_value: number | null
   cod_value: number | null
   insurance_value: number | null
@@ -32,7 +33,7 @@ export default async function DataSourcePage() {
   const [rows, countRows, uploads, profiles] = await Promise.all([
     query<PendingRow>(
       `select tid, granular_status, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome,
-              shipper_segment_raw, goods_value, cod_value, insurance_value, xb_value_usd, imported_at
+              shipper_segment_raw, recovery_name, goods_value, cod_value, insurance_value, xb_value_usd, imported_at
          from parcel_import
         where consumed_at is null
         order by imported_at desc
@@ -70,6 +71,7 @@ export default async function DataSourcePage() {
               <th className="py-2 pr-4">Subtype</th>
               <th className="py-2 pr-4">Outcome</th>
               <th className="py-2 pr-4">Segment</th>
+              <th className="py-2 pr-4">Name</th>
               <th className="py-2 pr-4">Goods</th>
               <th className="py-2 pr-4">COD</th>
               <th className="py-2 pr-4">Insurance</th>
@@ -86,6 +88,7 @@ export default async function DataSourcePage() {
                 <td className="py-2 pr-4">{r.pets_ticket_subtype ?? '—'}</td>
                 <td className="py-2 pr-4">{r.pets_ticket_outcome ?? '—'}</td>
                 <td className="py-2 pr-4">{r.shipper_segment_raw ?? '—'}</td>
+                <td className="py-2 pr-4">{r.recovery_name ?? '—'}</td>
                 <td className="py-2 pr-4">{r.goods_value ?? '—'}</td>
                 <td className="py-2 pr-4">{r.cod_value ?? '—'}</td>
                 <td className="py-2 pr-4">{r.insurance_value ?? '—'}</td>

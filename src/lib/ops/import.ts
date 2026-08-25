@@ -2,11 +2,14 @@ import { withTransaction } from '@/lib/db/mysql'
 import { isDuplicateKeyError } from '@/lib/ops/errors'
 
 // blank_or_zero(text) — Excel/CSV blank-placeholder normalization: "", "-", "0",
-// "0.0", "0.00" etc. all mean "no value", not the number zero.
+// "0.0", "0.00", the literal text "null" (case-insensitive — a stringification
+// artifact some export tools leave in empty cells), etc. all mean "no value", not
+// the number zero or the string "null".
 export function blankOrZero(val: string | null | undefined): string | null {
   if (val == null) return null
   const trimmed = val.trim()
   if (trimmed === '' || trimmed === '-') return null
+  if (/^null$/i.test(trimmed)) return null
   if (/^0+(\.0+)?$/.test(trimmed)) return null
   return trimmed
 }
@@ -112,6 +115,7 @@ export async function importParcelRows(
         blankOrZero(row.pets_ticket_outcome),
         blankOrZero(row.shipper_segment_raw),
         itemDescription,
+        blankOrZero(row.recovery_name),
         email,
       ]
 
@@ -121,8 +125,8 @@ export async function importParcelRows(
           `insert into parcel_import (
              tid, granular_status, cod_value, goods_value, insurance_value, xb_value_usd,
              pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, shipper_segment_raw,
-             item_description, imported_by
-           ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             item_description, recovery_name, imported_by
+           ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [tid, ...values]
         )
         affected = 1
@@ -133,7 +137,7 @@ export async function importParcelRows(
              granular_status = ?, cod_value = ?, goods_value = ?, insurance_value = ?,
              xb_value_usd = ?, pets_ticket_type = ?, pets_ticket_subtype = ?,
              pets_ticket_outcome = ?, shipper_segment_raw = ?, item_description = ?,
-             imported_by = ?, imported_at = current_timestamp(6)
+             recovery_name = ?, imported_by = ?, imported_at = current_timestamp(6)
            where tid = ? and consumed_at is null`,
           [...values, tid]
         )
