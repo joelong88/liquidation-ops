@@ -13,13 +13,18 @@ alter table parcel add column recovery_name varchar(255) null;
 -- Recompute the dedupe key to include the new column, so two override rules with
 -- the same recovery_name (and otherwise-null columns) for the same upload still
 -- collide as duplicates the way the original 5-column combo already does.
-alter table output_mapping_rule modify column dedupe_key varchar(700) generated always as (
+-- OceanBase rejects ALTER ... MODIFY COLUMN on a generated column definition
+-- (error 1235), so drop and recreate it instead of modifying in place — dropping
+-- the column also drops its unique index automatically, so that's recreated too.
+alter table output_mapping_rule drop column dedupe_key;
+alter table output_mapping_rule add column dedupe_key varchar(700) generated always as (
   concat_ws(char(1), upload_id,
     coalesce(status, ''), coalesce(shipper, ''),
     coalesce(ticket_type, ''), coalesce(ticket_subtype, ''), coalesce(order_outcome, ''),
     coalesce(recovery_name, '')
   )
 ) stored;
+alter table output_mapping_rule add unique key uq_output_mapping_rule_dedupe (dedupe_key);
 
 insert into output_mapping_rule (upload_id, recovery_name, output_bin, needs_force_success) values
   (1, 'Recovery TTDI RTS (RTS)', 'A', false);
