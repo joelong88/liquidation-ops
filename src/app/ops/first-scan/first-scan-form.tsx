@@ -29,11 +29,10 @@ const BIN_COLORS: Record<string, string> = {
   D: 'border-lime-500 bg-lime-50 text-lime-900',
   E: 'border-amber-400 bg-amber-50 text-amber-900',
   F: 'border-red-400 bg-red-50 text-red-900',
-  G: 'border-purple-400 bg-purple-50 text-purple-900',
 }
 
 const HVI_BINS = new Set(['A', 'C'])
-const ATTENTION_BINS = new Set(['E', 'F', 'G'])
+const ATTENTION_BINS = new Set(['E', 'F'])
 
 function soundKindForBin(bin?: string | null): 'success' | 'hvi' | 'attention' {
   if (bin && HVI_BINS.has(bin)) return 'hvi'
@@ -79,10 +78,10 @@ export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshol
             onChange={(e) => setTid(e.target.value)}
             autoFocus
             autoComplete="off"
-            disabled={pending}
+            readOnly={pending}
             maxLength={30}
             placeholder="Scan or type TID, then Enter"
-            className="rounded-md border border-neutral-300 px-4 py-4 text-2xl font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+            className={`rounded-md border border-neutral-300 px-4 py-4 text-2xl font-mono focus:border-neutral-500 focus:outline-none ${pending ? 'opacity-50' : ''}`}
           />
         </form>
 

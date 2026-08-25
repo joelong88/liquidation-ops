@@ -162,7 +162,7 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
         <label htmlFor="palletCode" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
           Current pallet (scan once, reuse for every sack below)
         </label>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex flex-wrap items-center gap-2">
           <input
             ref={palletRef}
             id="palletCode"
@@ -176,19 +176,19 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
             }}
             autoComplete="off"
             placeholder="Scan or type pallet ID, then Enter"
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-2xl font-bold font-mono focus:border-neutral-500 focus:outline-none"
+            className="min-w-0 flex-1 rounded-md border border-neutral-300 px-3 py-2 text-2xl font-bold font-mono focus:border-neutral-500 focus:outline-none"
           />
           {!confirmingClosePallet ? (
             <button
               type="button"
               onClick={() => setConfirmingClosePallet(true)}
               disabled={!palletCode.trim() || closingPallet}
-              className="whitespace-nowrap rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-40"
+              className="shrink-0 whitespace-nowrap rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-40"
             >
-              Close pallet
+              Close Pallet
             </button>
           ) : (
-            <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5">
+            <div className="flex shrink-0 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5">
               <span className="text-sm font-medium text-amber-900">Are you sure?</span>
               <button
                 type="button"
@@ -196,7 +196,7 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
                 disabled={closingPallet}
                 className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {closingPallet ? 'Closing…' : 'Yes, close'}
+                {closingPallet ? 'Closing…' : 'Yes, Close'}
               </button>
               <button
                 type="button"
@@ -221,9 +221,9 @@ export function StripAndConsolidateForm({ area }: { area: Area }) {
             value={sackCode}
             onChange={(e) => setSackCode(e.target.value)}
             autoComplete="off"
-            disabled={looking}
+            readOnly={looking}
             placeholder="Scan or type sack ID, then Enter"
-            className="rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+            className={`rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none ${looking ? 'opacity-50' : ''}`}
           />
         </form>
       ) : (

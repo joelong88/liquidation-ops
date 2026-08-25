@@ -10,7 +10,7 @@ type Row = {
 }
 
 function toCsv(rows: Row[]) {
-  const header = ['Level', 'ID', 'Scan', 'Result', 'Scanned by', 'When (SGT)']
+  const header = ['Level', 'ID', 'Scan', 'Result', 'Scanned by', 'When (PHT)']
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
   const lines = [
     header.join(','),

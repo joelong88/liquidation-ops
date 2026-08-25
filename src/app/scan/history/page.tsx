@@ -166,7 +166,7 @@ export default async function ScanHistoryPage() {
                 <th className="py-2 pr-4">Scan</th>
                 <th className="py-2 pr-4">Result</th>
                 <th className="py-2 pr-4">Scanned by</th>
-                <th className="py-2">When (SGT)</th>
+                <th className="py-2">When (PHT)</th>
               </tr>
             </thead>
             <tbody>

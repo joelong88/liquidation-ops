@@ -92,8 +92,8 @@ function gmvOf(rows: ParcelRow[]) {
 }
 
 function dayKey(iso: string) {
-  // Bucket by the SGT calendar day, not the raw UTC date.
-  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' })
+  // Bucket by the Manila calendar day, not the raw UTC date.
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
 }
 
 export async function OverviewPanel({ from, to }: { from?: string; to?: string } = {}) {

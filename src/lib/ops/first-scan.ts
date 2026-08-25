@@ -40,9 +40,10 @@ export async function resolveOutputBin(conn: PoolConnection, tid: string) {
     pets_ticket_subtype: string | null
     pets_ticket_outcome: string | null
     effective_value: number | null
+    value_source: string | null
   }>(
     conn,
-    'select tid, resolved_output_bin, needs_force_success, granular_status, shipper_segment, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, effective_value from parcel where tid = ? for update',
+    'select tid, resolved_output_bin, needs_force_success, granular_status, shipper_segment, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, effective_value, value_source from parcel where tid = ? for update',
     [tid]
   )
   const parcel = parcelRows[0]
@@ -75,7 +76,13 @@ export async function resolveOutputBin(conn: PoolConnection, tid: string) {
   const effectiveValue = parcel.effective_value
   const isHvi = effectiveValue == null ? null : effectiveValue >= threshold
 
-  let bin = rule?.output_bin ?? 'F'
+  // Bin F (ERROR / ticket creation) is reserved for TIDs the system has never seen
+  // before (no parcel_import/CSV row at scan time — value_source is only ever set to
+  // 'CSV_IMPORT' when that data existed, see recordFirstScan below). A known TID with
+  // no matching output_mapping_rule falls back to E (Move to rec area) instead — it
+  // isn't an error, it just needs manual routing until a rule is added for it.
+  const knownInSystem = parcel.value_source === 'CSV_IMPORT'
+  let bin = rule?.output_bin ?? (knownInSystem ? 'E' : 'F')
   if (bin === 'A' || bin === 'B') bin = isHvi ? 'A' : 'B'
   else if (bin === 'C' || bin === 'D') bin = isHvi ? 'C' : 'D'
 

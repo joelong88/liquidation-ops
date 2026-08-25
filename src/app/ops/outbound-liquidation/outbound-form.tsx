@@ -59,9 +59,9 @@ export function OutboundForm() {
           onChange={(e) => setPalletCode(e.target.value)}
           autoFocus
           autoComplete="off"
-          disabled={pending || confirmingCode != null}
+          readOnly={pending || confirmingCode != null}
           placeholder="Scan or type pallet ID, then Enter"
-          className="rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+          className={`rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none ${pending || confirmingCode != null ? 'opacity-50' : ''}`}
         />
       </form>
       {confirmingCode != null && (

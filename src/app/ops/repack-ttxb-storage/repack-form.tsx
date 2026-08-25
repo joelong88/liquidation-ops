@@ -63,10 +63,10 @@ export function RepackForm() {
           onChange={(e) => setTid(e.target.value)}
           autoFocus
           autoComplete="off"
-          disabled={pending}
+          readOnly={pending}
           maxLength={30}
           placeholder="Scan or type TID, then Enter"
-          className="rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+          className={`rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none ${pending ? 'opacity-50' : ''}`}
         />
       </form>
       {banner && (

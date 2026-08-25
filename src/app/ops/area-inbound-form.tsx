@@ -112,7 +112,7 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
           <label htmlFor="sackCode" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Current sack (scan once, reuse for every TID below)
           </label>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             <input
               ref={sackRef}
               id="sackCode"
@@ -126,15 +126,15 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
               }}
               autoComplete="off"
               placeholder="Scan or type sack ID, then Enter"
-              className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-2xl font-bold font-mono focus:border-neutral-500 focus:outline-none"
+              className="min-w-0 flex-1 rounded-md border border-neutral-300 px-3 py-2 text-2xl font-bold font-mono focus:border-neutral-500 focus:outline-none"
             />
             <ConfirmButton
               onConfirm={handleCloseSack}
-              label="Close sack"
-              confirmLabel="Yes, close"
+              label="CLOSE SACK"
+              confirmLabel="YES, CLOSE"
               pending={closing}
               disabled={!sackCode.trim() || closing}
-              className="whitespace-nowrap rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-40"
+              className="shrink-0 whitespace-nowrap rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800 disabled:opacity-40"
             />
           </div>
           {sackTidCount != null && (
@@ -155,10 +155,10 @@ export function AreaInboundForm({ area }: { area: 'STORAGE' | 'LIQUIDATION' }) {
             onChange={(e) => setTid(e.target.value)}
             autoFocus
             autoComplete="off"
-            disabled={pending}
+            readOnly={pending}
             maxLength={30}
             placeholder="Scan or type TID, then Enter"
-            className="rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+            className={`rounded-md border border-neutral-300 px-3 py-3 text-lg font-mono focus:border-neutral-500 focus:outline-none ${pending ? 'opacity-50' : ''}`}
           />
         </form>
 

@@ -1,6 +1,6 @@
-// The warehouse operates on Philippines time (UTC+8, same offset as Singapore) —
-// display timestamps in that zone regardless of the server's or viewer's own locale.
-const TIME_ZONE = 'Asia/Singapore'
+// The warehouse operates on Philippines time — display timestamps in that zone
+// regardless of the server's or viewer's own locale.
+const TIME_ZONE = 'Asia/Manila'
 
 function toDate(value: string | Date) {
   return typeof value === 'string' ? new Date(value) : value
