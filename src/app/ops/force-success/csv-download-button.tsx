@@ -1,16 +1,22 @@
 'use client'
 
+import { formatDate } from '@/lib/format-date'
+
 type Row = {
   tid: string
   current_stage: string
   granular_status: string | null
   resolved_output_bin: string | null
-  output_resolved_at: string | null
+  output_resolved_at: string | Date | null
 }
 
 function toCsv(rows: Row[]) {
   const header = ['TID', 'Stage', 'Status', 'Output Bin', 'Flagged At']
-  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+  // output_resolved_at arrives as a native Date object (the DB layer returns
+  // DATETIME columns as Date, not string, despite what the type says) — escape()
+  // must coerce defensively, since .replace() on a Date throws and would silently
+  // crash this function before it ever reached a.click().
+  const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const lines = [
     header.join(','),
     ...rows.map((r) =>
@@ -19,7 +25,7 @@ function toCsv(rows: Row[]) {
         r.current_stage,
         r.granular_status ?? '',
         r.resolved_output_bin ?? '',
-        r.output_resolved_at ?? '',
+        r.output_resolved_at ? formatDate(r.output_resolved_at) : '',
       ]
         .map(escape)
         .join(',')

@@ -1,21 +1,29 @@
 'use client'
 
+import { formatDateTime } from '@/lib/format-date'
+
 type Row = {
   level: 'TID' | 'Sack' | 'Pallet'
   idLabel: string
   scan: string
   result: string | null
   scannedByEmail: string | null
-  eventTs: string
+  eventTs: string | Date
 }
 
 function toCsv(rows: Row[]) {
   const header = ['Level', 'ID', 'Scan', 'Result', 'Scanned by', 'When (PHT)']
-  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+  // Values arrive as a mix of strings and (despite what the types say) native Date
+  // objects — the DB layer returns DATETIME columns as Date, not string. escape()
+  // must coerce defensively: calling .replace() directly on a Date throws, which
+  // was silently crashing this function before it ever reached a.click().
+  const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const lines = [
     header.join(','),
     ...rows.map((r) =>
-      [r.level, r.idLabel, r.scan, r.result ?? '', r.scannedByEmail ?? '', r.eventTs].map(escape).join(',')
+      [r.level, r.idLabel, r.scan, r.result ?? '', r.scannedByEmail ?? '', formatDateTime(r.eventTs)]
+        .map(escape)
+        .join(',')
     ),
   ]
   return lines.join('\n')
