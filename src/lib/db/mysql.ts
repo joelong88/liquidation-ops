@@ -14,13 +14,23 @@ function getPool(): mysql.Pool {
       decimalNumbers: true,
       dateStrings: false,
       connectionLimit: 10,
-      // Force the session to UTC so current_timestamp(6) (used as the default for
-      // every event_ts/created_at column) stores true UTC, not whatever timezone
-      // the DB server's own clock happens to be set to (observed: Manila, UTC+8).
-      // Without this, a raw Manila wall-clock value gets stored untagged, then the
-      // app's display logic (format-date.ts) applies ITS OWN Manila conversion on
-      // top — double-shifting every timestamp 8 hours into the future.
+      // mysql2's `timezone` option only controls how the driver parses/serializes
+      // JS Date <-> SQL string on THIS side of the wire — it does nothing to the
+      // DB SERVER's own session timezone, which is what current_timestamp(6)
+      // (the default for every event_ts/created_at column) actually computes
+      // against. The server's session is Manila (UTC+8, confirmed empirically:
+      // a scan at 3:54 PM Manila time was stored and displayed as 11:49 PM — the
+      // Manila value stored untagged, then format-date.ts's Manila conversion
+      // applied a SECOND +8h on top). Setting it here as a client option alone
+      // (previous attempt) did not fix this. The actual fix has to change what
+      // the server computes, via a real SET time_zone on every connection below.
       timezone: 'Z',
+    })
+    // Force every physical connection's session to UTC so current_timestamp(6)
+    // stores a true UTC instant, matching what format-date.ts's Manila conversion
+    // expects to convert FROM.
+    pool.on('connection', (conn) => {
+      conn.query("SET time_zone = '+00:00'").catch(() => {})
     })
   }
   return pool
