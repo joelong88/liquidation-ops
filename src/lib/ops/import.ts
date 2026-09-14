@@ -31,6 +31,14 @@ export function normalizeShipperSegment(raw: string | null | undefined): string 
       return 'TTPH'
     case 'TTXB':
       return 'TTXB'
+    // Real PETS/Redash exports use "TikTok" and "Cross Border" (in the
+    // reporting_segment column) rather than the literal codes TTPH/TTXB — every
+    // sampled row with "Cross Border" was a TT (...) TikTok shop, and every "TikTok"
+    // row was TikTok PH specifically, matching the app's TTXB/TTPH definitions.
+    case 'CROSSBORDER':
+      return 'TTXB'
+    case 'TIKTOK':
+      return 'TTPH'
     case 'NONTTXB':
       return 'NON_TTXB'
     case 'B2B':

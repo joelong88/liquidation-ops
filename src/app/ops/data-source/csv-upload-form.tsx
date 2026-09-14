@@ -49,10 +49,29 @@ const HEADER_ALIASES: Record<string, string> = {
   shippersegment: 'shipper_segment_raw',
   shipper_segment: 'shipper_segment_raw',
   segment: 'shipper_segment_raw',
+  reporting_segment: 'shipper_segment_raw',
+  reportingsegment: 'shipper_segment_raw',
+  ticket_outcome: 'pets_ticket_outcome',
+  ticketoutcome: 'pets_ticket_outcome',
   name: 'recovery_name',
   recoveryname: 'recovery_name',
   recovery_name: 'recovery_name',
+  consignee_name: 'recovery_name',
+  consigneename: 'recovery_name',
 }
+
+// Normalizes both the alias keys above and incoming CSV headers the same way, so
+// "last_pets_type" (underscores) and "lastpetstype" (no separators) match the same
+// alias regardless of which convention a given export uses — a real export file
+// (2026-09) used underscore-separated headers exclusively and every one of them
+// silently failed to match under the old whitespace-only normalization, leaving
+// pets_ticket_type/subtype/outcome/shipper_segment_raw null for every imported row.
+function normalizeHeaderKey(h: string) {
+  return h.trim().toLowerCase().replace(/[\s_-]+/g, '')
+}
+const NORMALIZED_HEADER_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(HEADER_ALIASES).map(([k, v]) => [normalizeHeaderKey(k), v])
+)
 
 function parseCsv(text: string): Record<string, string>[] {
   const rows: string[][] = []
@@ -93,7 +112,7 @@ function parseCsv(text: string): Record<string, string>[] {
   }
   if (rows.length === 0) return []
 
-  const headers = rows[0].map((h) => HEADER_ALIASES[h.trim().toLowerCase().replace(/\s+/g, '')] ?? '')
+  const headers = rows[0].map((h) => NORMALIZED_HEADER_ALIASES[normalizeHeaderKey(h)] ?? '')
   return rows
     .slice(1)
     .filter((r) => r.some((c) => c.trim() !== ''))
