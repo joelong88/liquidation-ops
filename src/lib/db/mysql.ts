@@ -29,8 +29,18 @@ function getPool(): mysql.Pool {
     // Force every physical connection's session to UTC so current_timestamp(6)
     // stores a true UTC instant, matching what format-date.ts's Manila conversion
     // expects to convert FROM.
+    //
+    // The pool's 'connection' event hands back the RAW underlying connection, not
+    // the promise-wrapped one, despite mysql2/promise's types declaring it as the
+    // latter — calling .catch() on conn.query() here throws "not a promise" on
+    // every single new connection (confirmed live: this crashed the server
+    // outright). Must use the raw connection's callback-style query() instead; the
+    // cast works around the incorrect type declaration, not around a real mismatch.
     pool.on('connection', (conn) => {
-      conn.query("SET time_zone = '+00:00'").catch(() => {})
+      const raw = conn as unknown as { query: (sql: string, cb: (err: unknown) => void) => void }
+      raw.query("SET time_zone = '+00:00'", (err) => {
+        if (err) console.error('Failed to set session time_zone on new connection', err)
+      })
     })
   }
   return pool
