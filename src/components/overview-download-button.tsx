@@ -25,7 +25,9 @@ export function OverviewDownloadButton({ sections }: { sections: Section[] }) {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Revoking immediately races the browser actually reading the blob for the
+    // download (most visible on Safari) — the download can silently never start.
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   return (

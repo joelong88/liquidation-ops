@@ -32,7 +32,10 @@ export function CsvDownloadButton({ rows }: { rows: Row[] }) {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Revoking immediately races the browser actually reading the blob for the
+    // download (most visible on Safari) — the download can silently never start.
+    // A short delay lets it grab the data first.
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   return (
