@@ -58,6 +58,9 @@ const HEADER_ALIASES: Record<string, string> = {
   recovery_name: 'recovery_name',
   consignee_name: 'recovery_name',
   consigneename: 'recovery_name',
+  order_tags: 'order_tags',
+  ordertags: 'order_tags',
+  tags: 'order_tags',
 }
 
 // Normalizes both the alias keys above and incoming CSV headers the same way, so

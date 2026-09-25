@@ -23,6 +23,7 @@ type ParcelImportRow = {
   shipper_segment_raw: string | null
   item_description: string | null
   recovery_name: string | null
+  order_tags: string | null
 }
 
 // resolve_output_bin(tid) — matches the parcel against output_mapping_rule
@@ -41,11 +42,12 @@ export async function resolveOutputBin(conn: PoolConnection, tid: string) {
     pets_ticket_subtype: string | null
     pets_ticket_outcome: string | null
     recovery_name: string | null
+    order_tags: string | null
     effective_value: number | null
     value_source: string | null
   }>(
     conn,
-    'select tid, resolved_output_bin, needs_force_success, granular_status, shipper_segment, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, recovery_name, effective_value, value_source from parcel where tid = ? for update',
+    'select tid, resolved_output_bin, needs_force_success, granular_status, shipper_segment, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, recovery_name, order_tags, effective_value, value_source from parcel where tid = ? for update',
     [tid]
   )
   const parcel = parcelRows[0]
@@ -54,6 +56,10 @@ export async function resolveOutputBin(conn: PoolConnection, tid: string) {
   // recovery_name is an override, not just another specific-match dimension: a rule
   // that matches on it always outranks one that only matches status/shipper/ticket
   // columns, regardless of how many of those it matches (see V10 migration).
+  // required_tag matches by substring against order_tags (a pipe-delimited list, e.g.
+  // "AIR | REC REQ | TTDI | US-10") rather than equality, and participates in the
+  // normal specific-match-count ranking alongside status/shipper/ticket columns
+  // (see V15 migration).
   const ruleRows = await queryRows<{ rule_id: number; output_bin: string; needs_force_success: number | boolean }>(
     conn,
     `select r.rule_id, r.output_bin, r.needs_force_success
@@ -65,10 +71,11 @@ export async function resolveOutputBin(conn: PoolConnection, tid: string) {
         and (r.ticket_subtype is null or upper(r.ticket_subtype) = upper(?))
         and (r.order_outcome is null or upper(r.order_outcome) = upper(?))
         and (r.recovery_name is null or upper(r.recovery_name) = upper(?))
+        and (r.required_tag is null or upper(coalesce(?, '')) like concat('%', upper(r.required_tag), '%'))
       order by
         (r.recovery_name is not null) desc,
         (r.status is not null) + (r.shipper is not null) + (r.ticket_type is not null)
-          + (r.ticket_subtype is not null) + (r.order_outcome is not null) desc,
+          + (r.ticket_subtype is not null) + (r.order_outcome is not null) + (r.required_tag is not null) desc,
         r.rule_id
       limit 1`,
     [
@@ -78,6 +85,7 @@ export async function resolveOutputBin(conn: PoolConnection, tid: string) {
       parcel.pets_ticket_subtype,
       parcel.pets_ticket_outcome,
       parcel.recovery_name,
+      parcel.order_tags,
     ]
   )
   const rule = ruleRows[0] as (typeof ruleRows)[0] | undefined
@@ -164,9 +172,9 @@ export async function recordFirstScan(
         `insert into parcel (
            tid, parcel_category, current_stage, received_at,
            granular_status, cod_value, goods_value, insurance_value, xb_value_usd,
-           pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, recovery_name,
+           pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, recovery_name, order_tags,
            shipper_segment, cod_source, manual_value_item_description, value_source
-         ) values (?, ?, 'RECEIVED', current_timestamp(6), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) values (?, ?, 'RECEIVED', current_timestamp(6), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           tid,
           parcelCategory,
@@ -179,6 +187,7 @@ export async function recordFirstScan(
           imp?.pets_ticket_subtype ?? null,
           imp?.pets_ticket_outcome ?? null,
           imp?.recovery_name ?? null,
+          imp?.order_tags ?? null,
           imp ? normalizeShipperSegment(imp.shipper_segment_raw) : 'UNKNOWN',
           imp?.cod_value != null ? 'CSV_IMPORT' : null,
           imp?.item_description ?? null,

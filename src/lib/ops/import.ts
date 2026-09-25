@@ -124,6 +124,7 @@ export async function importParcelRows(
         blankOrZero(row.shipper_segment_raw),
         itemDescription,
         blankOrZero(row.recovery_name),
+        blankOrZero(row.order_tags),
         email,
       ]
 
@@ -133,8 +134,8 @@ export async function importParcelRows(
           `insert into parcel_import (
              tid, granular_status, cod_value, goods_value, insurance_value, xb_value_usd,
              pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome, shipper_segment_raw,
-             item_description, recovery_name, imported_by
-           ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             item_description, recovery_name, order_tags, imported_by
+           ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [tid, ...values]
         )
         affected = 1
@@ -145,7 +146,7 @@ export async function importParcelRows(
              granular_status = ?, cod_value = ?, goods_value = ?, insurance_value = ?,
              xb_value_usd = ?, pets_ticket_type = ?, pets_ticket_subtype = ?,
              pets_ticket_outcome = ?, shipper_segment_raw = ?, item_description = ?,
-             recovery_name = ?, imported_by = ?, imported_at = current_timestamp(6)
+             recovery_name = ?, order_tags = ?, imported_by = ?, imported_at = current_timestamp(6)
            where tid = ? and consumed_at is null`,
           [...values, tid]
         )
