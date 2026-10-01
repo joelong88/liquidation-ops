@@ -44,6 +44,57 @@ export async function repackScan(email: string, tid: string, station: string | n
   })
 }
 
+// record_damaged_scan(tid, reason, station) — pulls one TID out of a CLOSED sack
+// (before it's formally stripped) when the operator opens the sack and finds it
+// damaged/leaking. Clears sack_id the same way repack_scan does, so strip_sack's
+// bulk-advance and assign_pallet's sack-based consolidation both naturally skip it —
+// no changes needed to either. Gated on the sack still being CLOSED (not yet
+// stripped) since that's the realistic window: the operator opens a closed sack to
+// sort it, finds damage, scans it out, then runs Strip & Consolidate on what's left.
+export async function recordDamagedScan(
+  email: string,
+  tid: string,
+  reason: string | null,
+  station: string | null
+) {
+  return withTransaction(async (conn) => {
+    const parcelRows = await queryRows<{ tid: string; sack_id: number | null }>(
+      conn,
+      'select tid, sack_id from parcel where tid = ? for update',
+      [tid]
+    )
+    const parcel = parcelRows[0]
+    if (!parcel) return { ok: false, error: 'not_found' }
+    if (parcel.sack_id == null) return { ok: false, error: 'not_in_sack' }
+
+    const sackRows = await queryRows<{ sack_id: number; status: string; area: string }>(
+      conn,
+      'select sack_id, status, area from sack where sack_id = ? for update',
+      [parcel.sack_id]
+    )
+    const sack = sackRows[0]
+    if (!sack || sack.status !== 'CLOSED') {
+      return { ok: false, error: 'sack_not_closed', status: sack?.status ?? null }
+    }
+
+    await execute(
+      conn,
+      'insert into stage_event (tid, stage, scanned_by, station, metadata) values (?, ?, ?, ?, ?)',
+      [tid, 'DAMAGED', email, station, reason ? JSON.stringify({ reason }) : null]
+    )
+    await execute(
+      conn,
+      `update parcel
+          set current_stage = 'DAMAGED', sack_id = null,
+              damaged_at = current_timestamp(6), damaged_by = ?, damage_reason = ?, updated_at = current_timestamp(6)
+        where tid = ?`,
+      [email, reason, tid]
+    )
+
+    return { ok: true, tid, sack_id: sack.sack_id, area: sack.area }
+  })
+}
+
 // force_sack_hold_success(sack_code, reason) — sack-grain audited override of the
 // 7-day TTXB hold; reason is required and logged.
 export async function forceSackHoldSuccess(email: string, sackCode: string, reason: string) {

@@ -30,16 +30,33 @@ type UploadRow = {
   non_ttxb_count: number
 }
 
-export default async function DataSourcePage() {
+export default async function DataSourcePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tid?: string }>
+}) {
+  const { tid: tidSearch } = await searchParams
+  const searchTerm = tidSearch?.trim()
+
   const [rows, countRows, uploads, profiles] = await Promise.all([
-    query<PendingRow>(
-      `select tid, granular_status, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome,
-              shipper_segment_raw, recovery_name, order_tags, goods_value, cod_value, insurance_value, xb_value_usd, imported_at
-         from parcel_import
-        where consumed_at is null
-        order by imported_at desc
-        limit 50`
-    ),
+    searchTerm
+      ? query<PendingRow>(
+          `select tid, granular_status, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome,
+                  shipper_segment_raw, recovery_name, order_tags, goods_value, cod_value, insurance_value, xb_value_usd, imported_at
+             from parcel_import
+            where consumed_at is null and tid like ?
+            order by imported_at desc
+            limit 200`,
+          [`%${searchTerm}%`]
+        )
+      : query<PendingRow>(
+          `select tid, granular_status, pets_ticket_type, pets_ticket_subtype, pets_ticket_outcome,
+                  shipper_segment_raw, recovery_name, order_tags, goods_value, cod_value, insurance_value, xb_value_usd, imported_at
+             from parcel_import
+            where consumed_at is null
+            order by imported_at desc
+            limit 100`
+        ),
     query<{ count: number }>('select count(*) as count from parcel_import where consumed_at is null'),
     query<UploadRow>(
       `select upload_id, uploaded_at, uploaded_by, total_rows, imported_count, skipped_count, ttxb_count, non_ttxb_count
@@ -63,6 +80,37 @@ export default async function DataSourcePage() {
         <h3 className="text-sm font-semibold text-neutral-900">
           Pending ({count ?? 0}) — not yet First-Scanned
         </h3>
+        <form className="flex items-end gap-2">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="tid" className="text-xs font-medium text-neutral-700">
+              Search by TID
+            </label>
+            <input
+              id="tid"
+              name="tid"
+              defaultValue={searchTerm ?? ''}
+              placeholder="e.g. WNJPH00925025422"
+              autoComplete="off"
+              className="w-64 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-mono focus:border-neutral-500 focus:outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
+          >
+            Search
+          </button>
+          {searchTerm && (
+            <a href="/ops/data-source" className="text-sm text-neutral-500 underline">
+              Clear
+            </a>
+          )}
+        </form>
+        <p className="text-xs text-neutral-500">
+          {searchTerm
+            ? `Showing up to 200 matches for "${searchTerm}".`
+            : `Showing the latest 100 of ${count ?? 0} — search by TID above to find a specific one.`}
+        </p>
         <table className="w-full max-w-3xl text-left text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
@@ -102,7 +150,11 @@ export default async function DataSourcePage() {
           </tbody>
         </table>
         {rows.length === 0 && (
-          <p className="text-sm text-neutral-400">No pending imports — upload a CSV above.</p>
+          <p className="text-sm text-neutral-400">
+            {searchTerm
+              ? `No pending TID matches "${searchTerm}" — it may already be First-Scanned, or was never imported.`
+              : 'No pending imports — upload a CSV above.'}
+          </p>
         )}
       </div>
 

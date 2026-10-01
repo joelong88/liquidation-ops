@@ -33,6 +33,7 @@ const GROUPS = [
     label: 'Shared',
     accent: 'border-neutral-300',
     tabs: [
+      { href: '/ops/damaged-items', label: 'Damaged Items' },
       { href: '/ops/endorsement', label: '7. Endorsement' },
       { href: '/ops/outbound-liquidation', label: '8. Outbound (Liquidation Area)' },
       { href: '/ops/force-success', label: '9. Force-Success List' },
