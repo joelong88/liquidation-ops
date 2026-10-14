@@ -8,7 +8,6 @@ export async function POST(request: Request) {
   const body = await request.json()
   const result = await assignPallet(
     auth.email,
-    auth.role,
     String(body.pallet_code),
     Array.isArray(body.sack_codes) ? body.sack_codes.map(String) : [],
     Array.isArray(body.tids) ? body.tids.map(String) : []

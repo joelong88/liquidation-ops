@@ -9,12 +9,13 @@ type SkipEntry = { sack_code?: string; tid?: string; reason: string }
 //
 // Creating a brand-new pallet was recovery_team/owner-only under the original RLS
 // (`pallet_insert_recovery`); adding to an existing one was open to warehouse_ops
-// too (`pallet_update_ops_recovery`). The route-level check alone can't express
-// that split since it's one function doing both operations conditionally, so it's
-// enforced here once we know which branch we're actually in.
+// too (`pallet_update_ops_recovery`). That split blocked agency/warehouse_ops staff
+// at Strip & Consolidate every time they were first to scan a new pallet code in a
+// shift (every sack-then-pallet scan creates one on first reference) — relaxed to
+// match the route's own role list (warehouse_ops/recovery_team/owner) so pallet
+// creation isn't gated any tighter than the station itself.
 export async function assignPallet(
   email: string,
-  role: string,
   palletCode: string,
   sackCodes: string[],
   tids: string[]
@@ -28,9 +29,6 @@ export async function assignPallet(
     let pallet = palletRows[0]
 
     if (!pallet) {
-      if (!['recovery_team', 'owner'].includes(role)) {
-        return { ok: false, error: 'forbidden' }
-      }
       const insertResult = await execute(conn, 'insert into pallet (pallet_code, assembled_by) values (?, ?)', [
         palletCode,
         email,

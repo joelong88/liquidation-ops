@@ -158,6 +158,43 @@ export async function importParcelRows(
         continue
       }
 
+      // A TID can be First-Scanned before its CSV row ever arrives — recordFirstScan
+      // then creates the parcel with every value/description field null and
+      // value_source null (see first-scan.ts), and nothing else ever revisits that
+      // row. Backfill it now so a late CSV upload still reaches the parcel: guarded
+      // on value_source is null so this never clobbers a parcel already seeded from
+      // CSV_IMPORT at scan time. Deliberately does not touch resolved_output_bin/
+      // is_hvi — the parcel may already be physically routed/sacked off the original
+      // (unknown-value) classification, and re-resolving now would desync the DB's
+      // bin from where the parcel physically is.
+      const [backfillResult] = await conn.query(
+        `update parcel set
+           granular_status = ?, cod_value = ?, goods_value = ?, insurance_value = ?, xb_value_usd = ?,
+           pets_ticket_type = ?, pets_ticket_subtype = ?, pets_ticket_outcome = ?, recovery_name = ?,
+           order_tags = ?, shipper_segment = ?, cod_source = ?, manual_value_item_description = ?,
+           value_source = 'CSV_IMPORT', updated_at = current_timestamp(6)
+         where tid = ? and value_source is null`,
+        [
+          blankOrZero(row.granular_status),
+          codValue,
+          goodsValue,
+          insuranceValue,
+          xbValueUsd,
+          blankOrZero(row.pets_ticket_type),
+          blankOrZero(row.pets_ticket_subtype),
+          blankOrZero(row.pets_ticket_outcome),
+          blankOrZero(row.recovery_name),
+          blankOrZero(row.order_tags),
+          normalizeShipperSegment(row.shipper_segment_raw),
+          codValue != null ? 'CSV_IMPORT' : null,
+          itemDescription,
+          tid,
+        ]
+      )
+      if ((backfillResult as { affectedRows: number }).affectedRows > 0) {
+        await conn.query('update parcel_import set consumed_at = current_timestamp(6) where tid = ?', [tid])
+      }
+
       imported += 1
       if (normalizeShipperSegment(row.shipper_segment_raw) === 'TTXB') {
         ttxbCount += 1

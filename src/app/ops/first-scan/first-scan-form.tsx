@@ -33,8 +33,20 @@ const BIN_COLORS: Record<string, string> = {
 
 const HVI_BINS = new Set(['A', 'C'])
 const ATTENTION_BINS = new Set(['E', 'F'])
+// Bins A-D are value-dependent (HVI vs non-HVI split) — if is_hvi came back null,
+// resolveOutputBin had no goods/COD/insurance/XB value AND no manual value to work
+// with at all, not just "below threshold." Flagged distinctly so the operator pulls
+// it aside for manual price validation (Shopee/Lazada) instead of treating it as a
+// normal, already-valued A-D parcel.
+const VALUE_DEPENDENT_BINS = new Set(['A', 'B', 'C', 'D'])
+const NO_VALUE_STYLE = 'border-neutral-950 bg-neutral-900 text-white'
 
-function soundKindForBin(bin?: string | null): 'success' | 'hvi' | 'attention' {
+function isNoValue(bin?: string | null, isHvi?: boolean | null) {
+  return Boolean(bin && VALUE_DEPENDENT_BINS.has(bin) && isHvi == null)
+}
+
+function soundKindForBin(bin?: string | null, isHvi?: boolean | null): 'success' | 'hvi' | 'attention' {
+  if (isNoValue(bin, isHvi)) return 'attention'
   if (bin && HVI_BINS.has(bin)) return 'hvi'
   if (bin && ATTENTION_BINS.has(bin)) return 'attention'
   return 'success'
@@ -55,7 +67,7 @@ export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshol
     setPending(true)
     const r = await callOpsApi<BinResult>('first-scan', { tid: value })
     setResult(r)
-    playScanSound(r.ok ? soundKindForBin(r.bin) : 'error')
+    playScanSound(r.ok ? soundKindForBin(r.bin, r.is_hvi) : 'error')
     setScannedTid(value)
     setTid('')
     setPending(false)
@@ -63,6 +75,7 @@ export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshol
   }
 
   const showBinBox = result && (result.ok || result.duplicate)
+  const noValue = showBinBox && isNoValue(result?.bin, result?.is_hvi)
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
@@ -88,15 +101,24 @@ export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshol
         {result && (
           <div
             className={`flex min-h-[320px] flex-col items-center justify-center gap-2 rounded-lg border-4 p-8 text-center ${
-              showBinBox ? BIN_COLORS[result.bin ?? 'F'] : 'border-red-400 bg-red-50 text-red-900'
+              !showBinBox
+                ? 'border-red-400 bg-red-50 text-red-900'
+                : noValue
+                  ? NO_VALUE_STYLE
+                  : BIN_COLORS[result.bin ?? 'F']
             }`}
           >
             {!showBinBox ? (
               <div className="text-lg font-semibold">{result.error ?? 'Scan failed'}</div>
             ) : (
               <>
+                {noValue && (
+                  <div className="mb-1 rounded-full bg-red-600 px-3 py-1 text-sm font-bold text-white">
+                    ⚠ NO VALUE — hold for manual price check
+                  </div>
+                )}
                 {result.duplicate && (
-                  <div className="mb-1 rounded-full bg-white/70 px-3 py-1 text-sm font-semibold">
+                  <div className="mb-1 rounded-full bg-white/70 px-3 py-1 text-sm font-semibold text-neutral-900">
                     ⚠ Already scanned before
                     {result.event_ts && ` — ${formatDateTime(result.event_ts)}`}
                   </div>
@@ -129,6 +151,9 @@ export function FirstScanForm({ bins, hviThreshold }: { bins: Bin[]; hviThreshol
               <span className="font-bold">{b.code}</span> — {b.label}
             </li>
           ))}
+          <li className={`rounded-md border px-3 py-2 text-sm ${NO_VALUE_STYLE}`}>
+            <span className="font-bold">Black</span> — A–D with no value at all (hold for manual price check)
+          </li>
         </ul>
         <div className="mt-3 flex flex-col gap-1 text-xs text-neutral-500">
           <p>
