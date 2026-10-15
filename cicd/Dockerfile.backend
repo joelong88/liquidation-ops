@@ -11,6 +11,11 @@ COPY . .
 RUN npm run build
 
 FROM node:24-slim AS runner
+# Trivy flagged perl-base CVEs (CVE-2026-13221, -42496, -8376, -42497, -48962,
+# -57432, -57433) in the base image's Debian packages. node:24-slim is already a
+# floating tag upstream rebuilds, so pulling the latest Debian security patches
+# at build time (rather than pinning a package/base version) is the fix.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8000
